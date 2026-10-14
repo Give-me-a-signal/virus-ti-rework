@@ -32,10 +32,21 @@ The vendor-specific MIDI path is reconstructed in user space. **We do not load t
 ### Requirements
 
 - Apple silicon Mac running macOS, an arm64 VST3 host and a powered Virus TI connected by USB.
-- Your own **Virus TI Software Suite 5.1.7.00.pkg**. Setup supports the exact installer SHA-256 `3ebcfef395a6c5f1ef2162404228f1fbe571371f7389836f13c55c8a7636ce1d` and rejects other inputs.
+- Your own **Virus TI Software Suite 5.1.7.00.pkg** — [download instructions below](#download-the-original-access-installer). Setup supports the exact installer SHA-256 `3ebcfef395a6c5f1ef2162404228f1fbe571371f7389836f13c55c8a7636ce1d` and rejects other inputs.
 - Apple Command Line Tools, CMake 3.25+, Ninja, Git and Python 3. Setup defaults to `/usr/bin/python3` from the Apple developer tools; `VTR_PYTHON` can select another working interpreter.
 
 The hardware build targets macOS 12 or later; that deployment target is **not** a compatibility certification. Current development/build checks ran on macOS 26.2, with physical testing on the project's TI Desktop. TI2, Snow, Intel Macs, Windows and other host/OS combinations are not validated releases.
+
+### Download the original Access installer
+
+1. Open the **[official Access download link for Virus TI Installer 5.1.7.00 for macOS](https://www.virus.info/download/585)**. Access redirects signed-out visitors to its login page.
+2. Sign in to your Access account. If you need an account, [register with Access and add your Virus hardware](https://www.virus.info/signup), then return to the download link.
+3. If the direct link leaves you on the downloads page, use the **[official Virus TI Software Suite download page](https://www.virus.info/start)**. Under **For macOS 10.7–10.14**, select **Virus TI Installer 5.1.7.00 for macOS**. Choose the macOS download, not either Windows installer.
+4. Locate **Virus TI Software Suite 5.1.7.00.pkg** in the download and keep it for the build command below. Replace the example `/path/to/` with its actual location on your Mac.
+
+The **macOS 10.7–10.14** label describes the original Access software; this is still the package required as input to Virus TI Rework. **Do not run the original installer for this setup.** The project's `setup.sh` extracts the required resources locally without installing the legacy plug-in or drivers, and checks the package against the SHA-256 above.
+
+Original Access resources remain subject to their own terms and are not included in this repository. The official download requires your own Access account; this project does not mirror the installer.
 
 ### Build, validate and install
 
