@@ -23,27 +23,27 @@ macOS/editor/hardware evidence: CI cannot establish that the synth works.
 
 ## Activation status — 14 October 2026
 
-**The protection rule is prepared but NOT active.** GitHub rejected both reading
-and applying private-repository branch protection with HTTP 403:
-“Upgrade to GitHub Pro or make this repository public to enable this feature.”
-Repository visibility remains private. CODEOWNERS, templates and this document
-do not substitute for server-side protection; users with existing write/admin
-access can still push directly until activation succeeds.
+**The repository is public and the `main` protection rule is active.** On
+14 October 2026, GitHub accepted the prepared configuration after the owner
+requested public visibility. The API readback confirmed required PR/code-owner
+review, one independent approval, stale-review dismissal, latest-push approval,
+strict `offline-core` checks, administrator enforcement, resolved conversations,
+linear history, and disabled force pushes/deletion.
 
-Applied and read back successfully: squash-only merges, automatic branch cleanup
-and disabled auto-merge. The status check is bound to GitHub Actions app ID 15368
-and its existing `offline-core` job, observed on the initial passing workflow.
+Squash-only merging, automatic merged-branch cleanup and disabled auto-merge are
+also enabled. The required check is bound to GitHub Actions app ID 15368 and its
+`offline-core` job. Workflow runs from all external PR contributors require
+maintainer approval; this was applied and read back after publication.
 
-The account owner can enable private-repository protection by choosing a suitable
-GitHub plan, or enable it after an explicitly approved public release. Do not
-change visibility or billing as a side effect of running repository setup.
-[GitHub's protected-branch availability](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches)
-describes the plan requirement.
+Previously, GitHub returned HTTP 403 for protection while this repository was
+private on the account's plan. That limitation no longer applies to this public
+repository. CODEOWNERS and policy files alone are not enforcement; the active
+server-side settings are what protect `main`.
 
 ## Reviewer setup
 
 The initial code owner is `@Give-me-a-signal`. A PR author cannot approve their
-own PR. Before activating strict protection for owner-authored work, the owner
+own PR. To merge owner-authored work under the active protection, the owner
 must appoint a second trusted reviewer with appropriate repository access and
 add them to CODEOWNERS. No new collaborators are invited by this change. Keep
 the independent review requirement rather than silently introducing an admin
@@ -51,8 +51,8 @@ bypass when a second reviewer is unavailable.
 
 ## Apply and verify the prepared rule
 
-Once the plan/visibility supports it and reviewer access is ready, an administrator
-can apply the reviewed configuration from the repository root:
+To reapply a reviewed configuration, an administrator can run from the repository
+root:
 
 ```sh
 gh api --method PUT repos/Give-me-a-signal/virus-ti-rework/branches/main/protection \
@@ -66,9 +66,8 @@ latest-push approval, conversation resolution, and disabled deletion/force push.
 Update the activation status in this file through a PR only after verification.
 Changing `main-protection.json` alone does not update GitHub settings.
 
-After public release, require approval for workflows from all external contributors
-in Settings → Actions → General. That public-fork approval setting currently returns
-HTTP 422 on this private repository. Keep workflow tokens read-only; never run
+Approval for workflows from all external contributors is enabled in Settings →
+Actions → General. Keep workflow tokens read-only; never run
 untrusted PR code with secrets via `pull_request_target`. Review workflow changes
 and resource-boundary changes carefully. The existing workflow uses `pull_request`,
 read-only contents permission and a pinned checkout action.
