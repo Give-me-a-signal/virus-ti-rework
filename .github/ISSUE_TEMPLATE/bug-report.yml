@@ -1,0 +1,32 @@
+name: Bug report
+description: Report a reproducible defect with expected and actual behavior.
+title: "[Bug] "
+body:
+  - type: input
+    id: revision
+    attributes:
+      label: Commit and configuration
+      description: Commit, synth/firmware (if connected), Mac/chip, macOS/build, DAW/version, USB path and rate/block.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Use a minimal disposable project; describe exact actions.
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Expected and actual behavior
+      description: Include frequency, last working commit if known, and whether offline or connected.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Redacted evidence and recovery outcome
+      description: Short logs/screenshots; if connected, report Disconnect/restore outcome. No private projects, firmware, patch dumps, serials or entire session folders.
+    validations:
+      required: true

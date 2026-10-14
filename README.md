@@ -2,13 +2,13 @@
 
 **Native Apple silicon VST3 integration for the Access Virus TI hardware synthesizer.**
 
-An independent community project by **Give Me a Signal** to keep owned Virus TI hardware useful on modern Macs. The hardware makes the sound; this plug-in brings its MIDI control, USB audio returns, patch browsing and project recall into a native DAW.
+An independent, open-source community project by **Give Me a Signal** to keep owned Virus TI hardware useful on modern Macs. The hardware makes the sound; this plug-in brings its MIDI control, USB audio returns, patch browsing and project recall into a native DAW.
 
-**Status: private developer preview, preparing for an open-source release.** Working hardware playback and Bitwig project recall have been demonstrated on one TI Desktop. This is not yet a broadly tested, signed and notarized consumer release, nor a drop-in replacement for every Virus Control feature. New project code is MIT licensed. Original Access resources are supplied locally by the owner and are not included in this repository.
+**Status: experimental. Available to build from source; contributions and hardware test reports are welcome.** Working hardware playback and Bitwig project recall have been demonstrated on one TI Desktop. This is not yet a broadly tested, signed and notarized consumer release, nor a drop-in replacement for every Virus Control feature. New project code is MIT licensed. Original Access resources are supplied locally by the owner and are not included in this repository.
 
 ![Virus TI Rework — Modern Dark filter page](docs/screenshots/dark-page-03.png)
 
-[Setup](#setup) · [What works](#what-works) · [How-it-works](#how-it-works) · [Engineering history](#how-we-built-it) · [Screenshots](#interface-gallery) · [Limitations](#known-limitations) · [Release packaging](#packaging-and-release-plan)
+[Setup](#setup) · [What works](#what-works) · [How-it-works](#how-it-works) · [Engineering history](#how-we-built-it) · [Screenshots](#interface-gallery) · [Limitations](#known-limitations) · [Help test](#help-test-on-more-macs-and-synths) · [Contribute](CONTRIBUTING.md) · [Release packaging](#packaging-and-binary-releases)
 
 ## What works
 
@@ -17,7 +17,7 @@ An independent community project by **Give Me a Signal** to keep owned Virus TI 
 | Native plug-in | arm64 VST3 processor/controller and Cocoa editor; three stereo output buses and sixteen-channel MIDI input |
 | Real hardware audio | Capture through Apple's existing USB audio/CoreAudio support; six device channels mapped to USB1, USB2 and USB3 |
 | Host sample rates | TI capture stays at 48 kHz; a 64-tap windowed-sinc resampler and FIFO drift correction adapt to the DAW |
-| MIDI and parts | Private TI USB MIDI interface, note delivery, supported CC controls, sixteen-part selection and routing |
+| MIDI and parts | Vendor-specific TI USB MIDI interface, note delivery, supported CC controls, sixteen-part selection and routing |
 | Patch browser | 62 banks / 7,164 checksum-verified shipped patches after local resource import; search, categories, two panes and selected-part recall |
 | Project recall | Versioned state contains sixteen RAM patches, RAM multi, routing and 2,672 mapped parameter values; connected projects reconnect when realtime processing starts |
 | Recovery | Original RAM snapshots before changes; verified manual Disconnect; independent recovery helper after plug-in/DAW exit or host crash |
@@ -25,7 +25,7 @@ An independent community project by **Give Me a Signal** to keep owned Virus TI 
 | Metering | Separate note-velocity activity and CC7 volume per part; three actual mixed USB capture peak meters |
 | Local API | Per-user Unix socket and Python control tool; no network listener; hardware connection is explicit except restored connected projects |
 
-The private MIDI path is reconstructed in user space. **We do not load the old Intel vendor plug-in, install the old kernel extension, or flash the synth.** Stored-bank writes and firmware commands are outside the hardware command allowlist.
+The vendor-specific MIDI path is reconstructed in user space. **We do not load the old Intel vendor plug-in, install the old kernel extension, or flash the synth.** Stored-bank writes and firmware commands are outside the hardware command allowlist.
 
 ## Setup
 
@@ -34,7 +34,6 @@ The private MIDI path is reconstructed in user space. **We do not load the old I
 - Apple silicon Mac running macOS, an arm64 VST3 host and a powered Virus TI connected by USB.
 - Your own **Virus TI Software Suite 5.1.7.00.pkg**. Setup supports the exact installer SHA-256 `3ebcfef395a6c5f1ef2162404228f1fbe571371f7389836f13c55c8a7636ce1d` and rejects other inputs.
 - Apple Command Line Tools, CMake 3.25+, Ninja, Git and Python 3. Setup defaults to `/usr/bin/python3` from the Apple developer tools; `VTR_PYTHON` can select another working interpreter.
-- Access to this private repository until it is made public.
 
 The hardware build targets macOS 12 or later; that deployment target is **not** a compatibility certification. Current development/build checks ran on macOS 26.2, with physical testing on the project's TI Desktop. TI2, Snow, Intel Macs, Windows and other host/OS combinations are not validated releases.
 
@@ -83,7 +82,7 @@ Snapshots and recovery logs live under `~/Library/Application Support/VirusTIRew
 flowchart LR
     DAW[Native VST3 host] -->|Notes and supported CCs| Plugin[VST3 processor]
     Plugin -->|Bounded queue| Worker[Native device service]
-    Worker -->|Private USB MIDI| TI[Virus TI hardware]
+    Worker -->|Vendor-specific USB MIDI| TI[Virus TI hardware]
     TI -->|Six-channel USB audio| Apple[Apple USB audio / CoreAudio]
     Apple --> FIFO[Capture FIFO and resampler]
     FIFO -->|USB1 / USB2 / USB3| Plugin
@@ -105,11 +104,11 @@ Three-return operation required identifying the original **Global USB controller
 
 ### MIDI, state and recovery
 
-Public MIDI discovery alone did not reproduce the original TI control path. Static analysis identified a separate private USB interface and protocol behavior. The new service opens that interface and sends a restricted set of note, supported CC, RAM-patch, request, routing and mode messages. MIDI reaches the hardware on the worker thread; sample offsets in the VST3 bridge do not imply sample-accurate USB scheduling.
+Public MIDI discovery alone did not reproduce the original TI control path. Static analysis identified a separate vendor-specific USB interface and protocol behavior. The new service opens that interface and sends a restricted set of note, supported CC, RAM-patch, request, routing and mode messages. MIDI reaches the hardware on the worker thread; sample offsets in the VST3 bridge do not imply sample-accurate USB scheduling.
 
 Project state stores real hardware patches, rather than merely the positions of visible knobs. Every dump is bounded and checksum-checked. Bitwig testing exposed two practical defects: overly slow duplicate reads during Save, and host state caching after API-driven edits. Serial single reads and explicit controller dirty notifications resolved the tested save/reopen path.
 
-DAW shutdown exposed another issue: a plug-in cannot rely on being allowed to spend approximately 23 seconds restoring hardware inside termination callbacks. A separate signed helper now retains the original snapshots and exclusive device lease before changes begin. A private pipe signals normal completion or host disappearance. The helper validates device identity, restores RAM, verifies readbacks and records the outcome even when the host exits abruptly.
+DAW shutdown exposed another issue: a plug-in cannot rely on being allowed to spend approximately 23 seconds restoring hardware inside termination callbacks. A separate signed helper now retains the original snapshots and exclusive device lease before changes begin. A dedicated local pipe signals normal completion or host disappearance. The helper validates device identity, restores RAM, verifies readbacks and records the outcome even when the host exits abruptly.
 
 ### Editor reconstruction
 
@@ -128,11 +127,11 @@ This is a documented reverse-engineering reconstruction, not recovered vendor so
 | Offline foundations | Built and tested descriptor, PCM, queue, MIDI, session and clock modules before relying on connected hardware. |
 | Native VST3 | Added arm64 processor/controller, sixteen-part parameters, state validation, three stereo buses and a native editor; exercised the official validator. |
 | UI and browser | Reconstructed the original layout, added graph interaction, verified 7,164 patches, corrected layout defects and added Dark/Polar appearances. |
-| Real TI audio | Verified private-interface MIDI and USB audio, then integrated CoreAudio capture and resampling directly into the plug-in's service. |
+| Real TI audio | Verified vendor-specific MIDI and USB audio, then integrated CoreAudio capture and resampling directly into the plug-in's service. |
 | Multi-part validation | Auditioned all sixteen parts, verified sound/routing recall, repaired USB3 initialization and checked 44.1/48/96 kHz host rates. |
 | DAW validation | Demonstrated playback in Live; verified native Bitwig project save/reopen, automatic reconnection and all sixteen hardware sounds. |
 | Exit recovery | Reproduced the quit-time RAM restoration failure, implemented the independent helper, and tested graceful exit, abrupt termination and normal Bitwig quit. |
-| Repository preparation | Separated owner-supplied resources, added reproducible local setup/packaging, MIT licensing, fresh UI gallery and source-only checks. |
+| Reproducible builds | Separated owner-supplied resources, added reproducible local setup/packaging, MIT licensing, fresh UI gallery and source-only checks. |
 
 Firmware/wavetable decoding and emulator experiments were a parallel research track. They helped offline investigation but are **not required to play the physical TI**, are not a firmware update feature, and the emulator/runtime sources and binaries are not bundled in this hardware repository.
 
@@ -149,6 +148,21 @@ Firmware/wavetable decoding and emulator experiments were a parallel research tr
 | User testing | Further Bitwig use reported by the owner on 14 October 2026; not presented as a new automated hardware matrix |
 
 See [hardware matrix](docs/hardware-matrix-2026-10-12.md), [Bitwig validation](docs/bitwig-validation-2026-10-12.md), [quit restoration](docs/quit-restoration-2026-10-12.md) and [repository verification](docs/repository-verification.json). Historical notes reference raw evidence under `analysis/`; those captures, personal projects, dumps and proprietary analysis artifacts are deliberately not tracked. Reports distinguish earlier failed runs from later fixes. Earlier sanitizer results apply to their tested revisions, not every later hardware service change.
+
+## Help test on more Macs and synths
+
+You do not need to write code to contribute. A careful report of what works—or fails—on a different setup is one of the most useful contributions you can make.
+
+We need coverage across **Apple silicon chip generations and variants**, **macOS releases and point updates**, **Virus TI models/firmware**, and **native VST3 hosts**. Report your exact chip (including Pro/Max/Ultra where applicable), macOS version/build, DAW version, USB connection path and plug-in commit. A result on one combination does not establish support for another. TI2 and Snow need separate compatibility investigation; the current sixteen-part Desktop path must not be assumed suitable for them.
+
+Start with the [hardware testing guide](docs/HARDWARE_TESTING.md). It separates build/scan checks, device discovery, playback, USB returns, project recall and restoration, so a partial test can still be useful. Use a disposable DAW project and report each stage as **pass**, **fail** or **not tested**. Testing does not require updating firmware, writing stored banks, weakening macOS security or deliberately crashing your DAW.
+
+- [Submit a hardware / macOS compatibility report](https://github.com/Give-me-a-signal/virus-ti-rework/issues/new?template=hardware-test.yml), including successful tests.
+- [Report a reproducible bug](https://github.com/Give-me-a-signal/virus-ti-rework/issues/new?template=bug-report.yml).
+- Check the [compatibility matrix](docs/COMPATIBILITY.md) before interpreting a report as supported hardware.
+- Improve documentation, accessibility, translations or code through a [pull request](CONTRIBUTING.md).
+
+All proposed repository changes go through a branch and PR. The review policy requires a passing `offline-core` check, an up-to-date branch, resolved review conversations and independent maintainer approval. GitHub enforcement and the maintainer activation procedure are recorded in [repository governance](docs/MAINTAINING.md); a policy file alone cannot prevent direct pushes.
 
 ## Known limitations
 
@@ -330,13 +344,13 @@ Regenerate the gallery after building with:
 /usr/bin/python3 tools/capture_gallery.py native/vst3/build-package
 ```
 
-## Packaging and release plan
+## Packaging and binary releases
 
-**Available now:** clone the private repo, supply the installer and run `setup.sh`. This produces a validated local bundle, reversible user-folder installation and checksum manifest. It does not change or restart a currently running DAW.
+**Build from source:** clone the repository, supply your own installer and run `setup.sh`. This produces a validated local bundle, reversible user-folder installation and checksum manifest. It does not change or restart a currently running DAW.
 
-**Before a public binary release:** decide how to distribute only permitted resources, ideally through a small local importer or a fully independent resource set; obtain Developer ID signing and notarization; test a wider TI/host/macOS matrix; document latency and remaining MIDI support. A friendly application/installer can wrap the current setup/import flow once those pieces are settled. Do not simply upload the locally generated ZIP: it contains Access resources.
+**Binary releases:** a ready-to-install, signed and notarized package is not available yet. Work toward one includes separating owner-supplied resources from distributable files, Developer ID signing and notarization, broader TI/host/macOS testing, and measured latency and MIDI coverage. A graphical installer can then wrap the resource-import flow. The locally generated ZIP contains Access resources and is for your own installation; it is not a redistributable release of the MIT code alone.
 
-The repository stays private until explicitly changed by its owner. No public release or vendor affiliation is implied by this preparation.
+No prebuilt, notarized consumer installer is available. This independent project is not affiliated with or endorsed by Access Music.
 
 ## Source map and contributing
 
@@ -344,7 +358,7 @@ The repository stays private until explicitly changed by its owner. No public re
 | --- | --- |
 | `native/vst3/` | Processor/controller, hardware service, FIFO, local API, state and restoration helper |
 | `native/editor/` | Cocoa editor, vector themes, original-artwork renderer, graphs and patch browser |
-| `native/private-midi/` | Private-interface discovery and restricted MIDI transport |
+| `native/private-midi/` | Vendor-specific interface discovery and restricted MIDI transport |
 | `native/transport-core/`, `native/audio-engine/` | Offline PCM/queue and async lifecycle foundations |
 | `native/usb-descriptors/`, `native/usb-session/`, `native/clock-sync/` | Descriptor, transaction and clock research modules |
 | `native/preview-host/` | Actual VST3 interface preview without hardware connection |
@@ -353,7 +367,7 @@ The repository stays private until explicitly changed by its owner. No public re
 
 For a resource-free smoke check, run `sh native/transport-core/build_and_test.sh` and `sh native/clock-sync/build_and_test.sh`. Full editor/service tests require the imported local resources and run through `setup.sh`. The GitHub workflow runs only the source-only checks; it cannot certify hardware behavior or render the proprietary-resource editor.
 
-Contributions should identify the hardware model, firmware, macOS, host version, sample rate/block size and exact reproduction steps. Keep personal projects, original patch dumps, credentials, vendor assets and raw decompiler output out of commits. A screenshot of a page is not proof of hardware behavior; include readbacks or bounded audio checks for device changes. Any new hardware commands need an explicit allowlist decision and restoration coverage.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the fork → branch → PR workflow, required validation and review policy. Test reports should identify the hardware model, firmware, macOS, host version, sample rate/block size and exact reproduction steps. Keep personal projects, original patch dumps, credentials, vendor assets and raw decompiler output out of commits. A screenshot of a page is not proof of hardware behavior; include readbacks or bounded audio checks for device changes. Any new hardware commands need an explicit allowlist decision and restoration coverage.
 
 ## Licence and acknowledgements
 

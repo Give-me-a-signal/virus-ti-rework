@@ -1,0 +1,96 @@
+name: Hardware / macOS compatibility report
+description: Report successful, failed or partial testing of an exact setup.
+title: "[Compatibility] Device / chip / macOS / DAW"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for testing. Read docs/HARDWARE_TESTING.md first. Build success
+        is not proof of hardware compatibility. Do not attach firmware, patch
+        dumps, full session directories, personal projects or serial numbers.
+  - type: input
+    id: revision
+    attributes:
+      label: Commit and build
+      description: Full git commit, local changes, build date and setup outcome.
+    validations:
+      required: true
+  - type: input
+    id: synth
+    attributes:
+      label: Virus model and firmware
+      placeholder: Exact TI/TI2 variant or Snow, firmware version; no serial number
+    validations:
+      required: true
+  - type: input
+    id: mac
+    attributes:
+      label: Mac and Apple chip
+      placeholder: Model/year, exact chip and Pro/Max/Ultra variant if applicable
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: macOS version and build
+      description: Copy version/build from sw_vers; identify betas.
+    validations:
+      required: true
+  - type: input
+    id: host
+    attributes:
+      label: DAW version and architecture
+      description: Include native arm64/Rosetta and plug-in isolation mode if known.
+    validations:
+      required: true
+  - type: textarea
+    id: connection
+    attributes:
+      label: USB and audio configuration
+      description: Direct/hub/dock model, cable/adapters, DAW output device, sample rate, block size and VST3 buses.
+    validations:
+      required: true
+  - type: dropdown
+    id: outcome
+    attributes:
+      label: Overall outcome within the stages tested
+      options:
+        - Partial test / some stages not tested
+        - All attempted stages passed
+        - One or more stages failed
+        - Regression from a previously working commit
+    validations:
+      required: true
+  - type: textarea
+    id: stages
+    attributes:
+      label: Per-stage results
+      description: Replace each not tested with pass/fail only when actually exercised. Include duration and reproduction steps.
+      value: |
+        Build and validator: not tested
+        Plug-in scan and editor: not tested
+        Discovery and connection: not tested
+        MIDI notes / note-off: not tested
+        USB1 / USB2 / USB3 (report separately): not tested
+        Parts/channels auditioned: not tested
+        Preset/control isolation: not tested
+        Playback duration and counter deltas: not tested
+        DAW save/reopen and sound/routing recall: not tested
+        Manual Disconnect restoration: not tested
+        Normal DAW-exit restoration and time: not tested
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence and reproduction
+      description: Short redacted log excerpts, counter deltas, exact steps and relevant screenshots. Identify synthetic meters. State what remains untested.
+    validations:
+      required: true
+  - type: checkboxes
+    id: disclosure
+    attributes:
+      label: Report checks
+      options:
+        - label: I distinguished pass, fail and not tested and checked attachments for private/vendor data.
+          required: true
