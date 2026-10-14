@@ -25,7 +25,14 @@
     ],
     "method": "Real native editor offscreen capture with fixture state"
   },
-  "clean_checkout": "pending",
+  "clean_checkout": "passed: installer expanded from scratch, SDK freshly cloned, six suites and 47 validator checks passed, local ZIP created",
   "hardware_regression": "Not rerun; see 12 October hardware/Bitwig reports",
-  "installed_plugin_changed": false
+  "installed_plugin_changed": false,
+  "clean_build_binary_sha256": "a45e7c6c64fea1fa3940553dc5a0a2eee8151c21cfb31205c3c2b12903011fb7",
+  "emulator_bundled": false,
+  "source_only_tests": {
+    "transport": "normal and ASan/UBSan passed",
+    "clock": "normal and ASan/UBSan passed"
+  },
+  "source_boundary": "221 tracked files screened; original payloads, generated tables, raw evidence and compiled executables excluded"
 }
