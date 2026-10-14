@@ -8,7 +8,7 @@ An independent, open-source community project by **Give Me a Signal** to keep ow
 
 ![Virus TI Rework — Modern Dark filter page](docs/screenshots/dark-page-03.png)
 
-[Setup](#setup) · [What works](#what-works) · [How-it-works](#how-it-works) · [Engineering history](#how-we-built-it) · [Screenshots](#interface-gallery) · [Limitations](#known-limitations) · [Help test](#help-test-on-more-macs-and-synths) · [Contribute](CONTRIBUTING.md) · [Release packaging](#packaging-and-binary-releases)
+[Setup](#setup) · [AI-assisted setup](#ai-assisted-setup-for-non-technical-users) · [What works](#what-works) · [How-it-works](#how-it-works) · [Engineering history](#how-we-built-it) · [Screenshots](#interface-gallery) · [Limitations](#known-limitations) · [Help test](#help-test-on-more-macs-and-synths) · [Contribute](CONTRIBUTING.md) · [Release packaging](#packaging-and-binary-releases)
 
 ## What works
 
@@ -32,10 +32,52 @@ The vendor-specific MIDI path is reconstructed in user space. **We do not load t
 ### Requirements
 
 - Apple silicon Mac running macOS, an arm64 VST3 host and a powered Virus TI connected by USB.
-- Your own **Virus TI Software Suite 5.1.7.00.pkg**. Setup supports the exact installer SHA-256 `3ebcfef395a6c5f1ef2162404228f1fbe571371f7389836f13c55c8a7636ce1d` and rejects other inputs.
+- Your own **Virus TI Software Suite 5.1.7.00.pkg** — [download instructions below](#download-the-original-access-installer). Setup supports the exact installer SHA-256 `3ebcfef395a6c5f1ef2162404228f1fbe571371f7389836f13c55c8a7636ce1d` and rejects other inputs.
 - Apple Command Line Tools, CMake 3.25+, Ninja, Git and Python 3. Setup defaults to `/usr/bin/python3` from the Apple developer tools; `VTR_PYTHON` can select another working interpreter.
 
 The hardware build targets macOS 12 or later; that deployment target is **not** a compatibility certification. Current development/build checks ran on macOS 26.2, with physical testing on the project's TI Desktop. TI2, Snow, Intel Macs, Windows and other host/OS combinations are not validated releases.
+
+### Download the original Access installer
+
+1. Open the **[official Access download link for Virus TI Installer 5.1.7.00 for macOS](https://www.virus.info/download/585)**. Access redirects signed-out visitors to its login page.
+2. Sign in to your Access account. If you need an account, [register with Access and add your Virus hardware](https://www.virus.info/signup), then return to the download link.
+3. If the direct link leaves you on the downloads page, use the **[official Virus TI Software Suite download page](https://www.virus.info/start)**. Under **For macOS 10.7–10.14**, select **Virus TI Installer 5.1.7.00 for macOS**. Choose the macOS download, not either Windows installer.
+4. Locate **Virus TI Software Suite 5.1.7.00.pkg** in the download and keep it for the build command below. Replace the example `/path/to/` with its actual location on your Mac.
+
+The **macOS 10.7–10.14** label describes the original Access software; this is still the package required as input to Virus TI Rework. **Do not run the original installer for this setup.** The project's `setup.sh` extracts the required resources locally without installing the legacy plug-in or drivers, and checks the package against the SHA-256 above.
+
+Original Access resources remain subject to their own terms and are not included in this repository. The official download requires your own Access account; this project does not mirror the installer.
+
+### AI-assisted setup for non-technical users
+
+An AI coding agent with permission to access files and run commands on your Mac can help you build and install the plug-in. A chat-only assistant can explain the steps, but cannot perform the local installation for you.
+
+First, [download the original Access installer](#download-the-original-access-installer) yourself and keep the `.pkg` file. Then copy the following prompt into your preferred coding agent:
+
+```text
+Help me build and install Virus TI Rework from
+https://github.com/Give-me-a-signal/virus-ti-rework on this Mac.
+
+Read the README, CONTRIBUTING.md and docs/HARDWARE_TESTING.md first.
+Check my Mac, macOS version and DAW against the documented requirements
+and limitations. Explain any missing prerequisites before installing them.
+
+Ask me where I saved "Virus TI Software Suite 5.1.7.00.pkg". Use the
+repository's setup script to extract its resources; do not run the original
+Access installer. Build and validate the plug-in, then install it following
+the documented instructions.
+
+Don't disable macOS security protections, update my Virus firmware or write
+stored patch banks. Before connecting to the synth, confirm my exact Virus
+model and follow the testing guide's restrictions for untested hardware.
+
+Help me test in a disposable DAW project and prepare a compatibility report
+with my Mac chip, macOS version, Virus model/firmware, DAW version, plug-in
+commit, USB setup, sample rate and buffer size. Clearly separate what passed,
+failed or wasn't tested. Let me review the report before posting it.
+```
+
+You do not need to understand the code to contribute. Even finding a confusing setup step is useful feedback. An agent can make setup easier, but the plug-in is still experimental and using an agent does not establish compatibility with your hardware or DAW. Use the [hardware testing guide](docs/HARDWARE_TESTING.md) and share reviewed results through [GitHub Issues](https://github.com/Give-me-a-signal/virus-ti-rework/issues).
 
 ### Build, validate and install
 
