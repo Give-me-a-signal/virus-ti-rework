@@ -1,0 +1,5 @@
+# Review ownership; enforcement additionally requires active branch protection.
+* @Give-me-a-signal
+
+# Add a second trusted code owner before enabling strict review enforcement
+# for PRs authored by Give-me-a-signal. Do not grant access through this file.

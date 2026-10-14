@@ -4,11 +4,11 @@
 
 An independent community project by **Give Me a Signal** to keep owned Virus TI hardware useful on modern Macs. The hardware makes the sound; this plug-in brings its MIDI control, USB audio returns, patch browsing and project recall into a native DAW.
 
-**Status: private developer preview, preparing for an open-source release.** Working hardware playback and Bitwig project recall have been demonstrated on one TI Desktop. This is not yet a broadly tested, signed and notarized consumer release, nor a drop-in replacement for every Virus Control feature. New project code is MIT licensed. Original Access resources are supplied locally by the owner and are not included in this repository.
+**Status: experimental developer preview. Contributions and hardware test reports are welcome.** Working hardware playback and Bitwig project recall have been demonstrated on one TI Desktop. This is not yet a broadly tested, signed and notarized consumer release, nor a drop-in replacement for every Virus Control feature. New project code is MIT licensed. Original Access resources are supplied locally by the owner and are not included in this repository.
 
 ![Virus TI Rework — Modern Dark filter page](docs/screenshots/dark-page-03.png)
 
-[Setup](#setup) · [What works](#what-works) · [How-it-works](#how-it-works) · [Engineering history](#how-we-built-it) · [Screenshots](#interface-gallery) · [Limitations](#known-limitations) · [Release packaging](#packaging-and-release-plan)
+[Setup](#setup) · [What works](#what-works) · [How-it-works](#how-it-works) · [Engineering history](#how-we-built-it) · [Screenshots](#interface-gallery) · [Limitations](#known-limitations) · [Help test](#help-test-on-more-macs-and-synths) · [Contribute](CONTRIBUTING.md) · [Release packaging](#packaging-and-release-plan)
 
 ## What works
 
@@ -34,7 +34,6 @@ The private MIDI path is reconstructed in user space. **We do not load the old I
 - Apple silicon Mac running macOS, an arm64 VST3 host and a powered Virus TI connected by USB.
 - Your own **Virus TI Software Suite 5.1.7.00.pkg**. Setup supports the exact installer SHA-256 `3ebcfef395a6c5f1ef2162404228f1fbe571371f7389836f13c55c8a7636ce1d` and rejects other inputs.
 - Apple Command Line Tools, CMake 3.25+, Ninja, Git and Python 3. Setup defaults to `/usr/bin/python3` from the Apple developer tools; `VTR_PYTHON` can select another working interpreter.
-- Access to this private repository until it is made public.
 
 The hardware build targets macOS 12 or later; that deployment target is **not** a compatibility certification. Current development/build checks ran on macOS 26.2, with physical testing on the project's TI Desktop. TI2, Snow, Intel Macs, Windows and other host/OS combinations are not validated releases.
 
@@ -149,6 +148,21 @@ Firmware/wavetable decoding and emulator experiments were a parallel research tr
 | User testing | Further Bitwig use reported by the owner on 14 October 2026; not presented as a new automated hardware matrix |
 
 See [hardware matrix](docs/hardware-matrix-2026-10-12.md), [Bitwig validation](docs/bitwig-validation-2026-10-12.md), [quit restoration](docs/quit-restoration-2026-10-12.md) and [repository verification](docs/repository-verification.json). Historical notes reference raw evidence under `analysis/`; those captures, personal projects, dumps and proprietary analysis artifacts are deliberately not tracked. Reports distinguish earlier failed runs from later fixes. Earlier sanitizer results apply to their tested revisions, not every later hardware service change.
+
+## Help test on more Macs and synths
+
+You do not need to write code to contribute. A careful report of what works—or fails—on a different setup is one of the most useful contributions you can make.
+
+We need coverage across **Apple silicon chip generations and variants**, **macOS releases and point updates**, **Virus TI models/firmware**, and **native VST3 hosts**. Report your exact chip (including Pro/Max/Ultra where applicable), macOS version/build, DAW version, USB connection path and plug-in commit. A result on one combination does not establish support for another. TI2 and Snow need separate compatibility investigation; the current sixteen-part Desktop path must not be assumed suitable for them.
+
+Start with the [hardware testing guide](docs/HARDWARE_TESTING.md). It separates build/scan checks, device discovery, playback, USB returns, project recall and restoration, so a partial test can still be useful. Use a disposable DAW project and report each stage as **pass**, **fail** or **not tested**. Testing does not require updating firmware, writing stored banks, weakening macOS security or deliberately crashing your DAW.
+
+- [Submit a hardware / macOS compatibility report](https://github.com/Give-me-a-signal/virus-ti-rework/issues/new?template=hardware-test.yml), including successful tests.
+- [Report a reproducible bug](https://github.com/Give-me-a-signal/virus-ti-rework/issues/new?template=bug-report.yml).
+- Check the [compatibility matrix](docs/COMPATIBILITY.md) before interpreting a report as supported hardware.
+- Improve documentation, accessibility, translations or code through a [pull request](CONTRIBUTING.md).
+
+All proposed repository changes go through a branch and PR. The review policy requires a passing `offline-core` check, an up-to-date branch, resolved review conversations and independent maintainer approval. GitHub enforcement and the maintainer activation procedure are recorded in [repository governance](docs/MAINTAINING.md); a policy file alone cannot prevent direct pushes.
 
 ## Known limitations
 
@@ -332,11 +346,11 @@ Regenerate the gallery after building with:
 
 ## Packaging and release plan
 
-**Available now:** clone the private repo, supply the installer and run `setup.sh`. This produces a validated local bundle, reversible user-folder installation and checksum manifest. It does not change or restart a currently running DAW.
+**Build from source:** clone the repository, supply your own installer and run `setup.sh`. This produces a validated local bundle, reversible user-folder installation and checksum manifest. It does not change or restart a currently running DAW.
 
 **Before a public binary release:** decide how to distribute only permitted resources, ideally through a small local importer or a fully independent resource set; obtain Developer ID signing and notarization; test a wider TI/host/macOS matrix; document latency and remaining MIDI support. A friendly application/installer can wrap the current setup/import flow once those pieces are settled. Do not simply upload the locally generated ZIP: it contains Access resources.
 
-The repository stays private until explicitly changed by its owner. No public release or vendor affiliation is implied by this preparation.
+No prebuilt, notarized consumer installer is available. This independent project is not affiliated with or endorsed by Access Music.
 
 ## Source map and contributing
 
@@ -353,7 +367,7 @@ The repository stays private until explicitly changed by its owner. No public re
 
 For a resource-free smoke check, run `sh native/transport-core/build_and_test.sh` and `sh native/clock-sync/build_and_test.sh`. Full editor/service tests require the imported local resources and run through `setup.sh`. The GitHub workflow runs only the source-only checks; it cannot certify hardware behavior or render the proprietary-resource editor.
 
-Contributions should identify the hardware model, firmware, macOS, host version, sample rate/block size and exact reproduction steps. Keep personal projects, original patch dumps, credentials, vendor assets and raw decompiler output out of commits. A screenshot of a page is not proof of hardware behavior; include readbacks or bounded audio checks for device changes. Any new hardware commands need an explicit allowlist decision and restoration coverage.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the fork → branch → PR workflow, required validation and review policy. Test reports should identify the hardware model, firmware, macOS, host version, sample rate/block size and exact reproduction steps. Keep personal projects, original patch dumps, credentials, vendor assets and raw decompiler output out of commits. A screenshot of a page is not proof of hardware behavior; include readbacks or bounded audio checks for device changes. Any new hardware commands need an explicit allowlist decision and restoration coverage.
 
 ## Licence and acknowledgements
 
