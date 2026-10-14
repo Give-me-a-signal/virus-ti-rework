@@ -1,0 +1,31 @@
+{
+  "date": "2026-10-14",
+  "scope": "Private source repository and local hardware-build packaging; no new hardware session",
+  "project_suites": 6,
+  "project_result": "passed",
+  "vst3_validator": {
+    "passed": 47,
+    "failed": 0
+  },
+  "native_architecture": "arm64",
+  "codesign": "Ad-hoc bundle and nested helper verified; not notarized",
+  "local_installer_sha256": "3ebcfef395a6c5f1ef2162404228f1fbe571371f7389836f13c55c8a7636ce1d",
+  "resource_regeneration": {
+    "display_waveform_samples": "4096 bit patterns match previous extraction",
+    "patch_decode_mapping": "matches previous mapping excluding comment",
+    "hardware_test_fixture_sha256": "a878286264109defc1fbeff00f2bc33bc60f5468e20df647b207bac37ca0e6cc"
+  },
+  "screenshots": {
+    "count": 36,
+    "pages": 12,
+    "appearances": [
+      "dark",
+      "polar",
+      "original"
+    ],
+    "method": "Real native editor offscreen capture with fixture state"
+  },
+  "clean_checkout": "pending",
+  "hardware_regression": "Not rerun; see 12 October hardware/Bitwig reports",
+  "installed_plugin_changed": false
+}

@@ -1,0 +1,17 @@
+name: Source-only checks
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  offline-core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Check repository resource boundary
+        run: python3 tools/check_repository.py
+      - name: Check setup scripts
+        run: bash -n setup.sh tools/install_local.sh native/vst3/build_and_test.sh native/vst3/bootstrap_sdk.sh
+      - name: Compile Python tools
+        run: python3 -m compileall -q tools native/vst3/generate_catalog.py
+      - name: Offline transport tests with sanitizers
+        run: sh native/transport-core/build_and_test.sh

@@ -1,0 +1,28 @@
+# Local vendor material, hardware/session evidence and dependency checkouts.
+/analysis/
+/third_party/
+*.pkg
+*.dmg
+*.syx
+*.mid
+*.wav
+*.vtrstate
+*.bwproject
+*.rea-snapshot.json
+**/build*/
+**/target/
+**/__pycache__/
+*.pyc
+.DS_Store
+.env
+.env.*
+/dist/
+# Generated locally from the owner's installer, not MIT project source.
+/native/vst3/catalog.h
+/native/vst3/catalog-provenance.json
+/native/editor/browser_mapping.inc
+/native/editor/graph_waveforms.h
+# Separate firmware/emulator research is not in the hardware release.
+/native/osti-render/
+/native/dsp-probe/
+/native/private-midi/restore_daw

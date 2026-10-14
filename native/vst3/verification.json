@@ -1,0 +1,65 @@
+{
+  "date": "2026-10-11",
+  "binary_path": "native/vst3/build/VST3/Release/Virus TI Rework Development.vst3/Contents/MacOS/Virus TI Rework Development",
+  "sha256": "90392d2fdcb0ba67084292aa98a754bad698906f1ef85c42aa4ad2fd2dde0b60",
+  "architecture": "arm64",
+  "deployment_target": "11.0",
+  "sdk_revision": "3cdf9ca5d1f5b1b21e0a86832aa4abe55607bd96",
+  "validator": {
+    "passed": 47,
+    "failed": 0
+  },
+  "project_tests": {
+    "release": "passed",
+    "asan_ubsan": "passed",
+    "truncations_checked": 32076,
+    "processor_release": "passed",
+    "processor_asan_ubsan": "passed",
+    "cocoa_editor_release": "passed",
+    "cocoa_editor_asan_ubsan": "passed",
+    "native_page_renders": 12,
+    "nonzero_pcm_bridge_integration": "passed",
+    "exact_midi_offsets_and_bytes": "passed",
+    "ui_algorithm_mode_and_value_list_regressions": "passed",
+    "graph_parameter_sweeps_asan_ubsan": "passed",
+    "patch_bank_and_browser_asan_ubsan": "passed",
+    "graph_handle_hit_and_host_gestures": "passed",
+    "partial_patch_recall_part_isolation": "passed",
+    "preview_host_dynamic_attach_edit_detach": "passed"
+  },
+  "hardware_connected": false,
+  "global_install": false,
+  "limitation": "Offline native interface with reconstructed graphs and partial local patch recall. No audio or USB service. Hardware recall, bank saving, exact original interaction/rasterization and complete host state remain unfinished.",
+  "custom_editor": true,
+  "host_window_launched": true,
+  "live_ui_checks": [
+    "opened actual native VST3",
+    "navigated Browser and Filter",
+    "double-clicked genuine shipped preset into Part 1",
+    "dragged filter handle and observed cutoff update",
+    "refreshed preview and verified oscillator knob alignment and menu labels"
+  ],
+  "patch_library": {
+    "banks": 62,
+    "checksum_verified_patches": 7164
+  },
+  "layout_sweep": {
+    "png_pixel_dimensions": "normalized independently of DPI metadata",
+    "menu_artwork": "declared cap insets preserved",
+    "menu_text": "centered within value area, arrows excluded",
+    "visually_checked_pages": [
+      "Oscillator",
+      "Matrix",
+      "Arp",
+      "FX1",
+      "FX2 Tape Clocked",
+      "Common",
+      "Filter",
+      "LFO",
+      "Browser"
+    ],
+    "release_log": "native/vst3/build/layout-sweep.log",
+    "sanitizer_log": "native/vst3/build/layout-sweep-sanitized.log",
+    "preview_refreshed": true
+  }
+}
