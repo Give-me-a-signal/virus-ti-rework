@@ -39,5 +39,5 @@ loader remains in the source; enabling an external runtime is a separate build
 and licensing decision. The hardware release explicitly disables runtime bundling.
 
 Public binary distribution still requires a resource-distribution decision and
-Developer ID signing/notarization. A private source repository plus owner-supplied
-resources is the current distribution workflow, not a notarized consumer installer.
+Developer ID signing/notarization. The public source repository plus owner-supplied
+local resources is the current distribution workflow, not a notarized consumer installer.
