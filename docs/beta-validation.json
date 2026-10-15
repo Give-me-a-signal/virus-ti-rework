@@ -1,0 +1,152 @@
+{
+  "version": "0.2.0-beta.1",
+  "status": "packaged beta smoke-tested in four DAWs; extended host routing/automation and clean-account installation reports pending",
+  "recorded_date": "2026-10-15",
+  "platform": {
+    "macOS": "26.2",
+    "build": "25C56",
+    "architecture": "arm64",
+    "chip": "Apple M1 Pro"
+  },
+  "offline": {
+    "project_suites": 9,
+    "passed": 9,
+    "vst3_validator_passed": 47,
+    "vst3_validator_failed": 0,
+    "auval_strict": "passed",
+    "setup_transactions": "passed",
+    "original_appearance_import_and_reimport": "passed",
+    "editor": "Dark/Polar: 12 pages at 100/150/200%; optional Original Access: 12 rendered pages"
+  },
+  "hardware": {
+    "model": "TI Desktop",
+    "host_harness": "native API host",
+    "sample_rate": 48000,
+    "block": 256,
+    "three_returns": "passed",
+    "capture_errors": 0,
+    "fifo_overruns": 0,
+    "fifo_underruns": 0,
+    "recall": "16 patches byte-identical; multi matches except volatile byte 10 and checksum",
+    "restoration": "manual disconnect and independent normal-host-exit recovery passed",
+    "additional_rates": [
+      {
+        "rate": 44100,
+        "block": 64,
+        "bus_peaks": [
+          0.027099609375,
+          0.027099609375,
+          0.027099609375
+        ],
+        "counters": {
+          "fifo_overruns": 0,
+          "fifo_underruns": 0,
+          "capture_callbacks": 4421,
+          "capture_errors": 0,
+          "rendered_frames": 350976,
+          "midi_sent": 5
+        },
+        "restoration": "completed-by-plugin"
+      },
+      {
+        "rate": 96000,
+        "block": 512,
+        "bus_peaks": [
+          0.027099609375,
+          0.027099609375,
+          0.027099609375
+        ],
+        "counters": {
+          "fifo_overruns": 0,
+          "fifo_underruns": 0,
+          "capture_callbacks": 4404,
+          "capture_errors": 0,
+          "rendered_frames": 731648,
+          "midi_sent": 5
+        },
+        "restoration": "restored"
+      }
+    ],
+    "au": {
+      "rate": 96000,
+      "block": 256,
+      "real_hardware_audio": true,
+      "second_vst3_ownership_rejected": true,
+      "capture_errors": 0,
+      "fifo_overruns": 0,
+      "fifo_underruns": 0,
+      "recovery": "independent recovery after AU host exit passed",
+      "rendered_peak": 0.0274348
+    }
+  },
+  "not_tested": [
+    "GarageBand",
+    "TI2",
+    "Snow",
+    "clean account browser-download/Gatekeeper installation",
+    "full DAW auxiliary routing and automation matrix",
+    "Ableton authorized save/reopen/export"
+  ],
+  "signing": "ad-hoc, not Developer ID signed or notarized",
+  "ci": {
+    "commit": "09bda01",
+    "macos_build_auval_and_packaging": "passed",
+    "url": "https://github.com/Give-me-a-signal/virus-ti-rework/actions/runs/38716798561"
+  },
+  "tested_source_commit": "da5aaea7dab63cec582d2bbfb647e647276448e7",
+  "daw_smoke_tests": [
+    {
+      "host": "Logic Pro",
+      "version": "12.4",
+      "format": "AUv2",
+      "rate": 48000,
+      "three_internal_stereo_returns": "passed",
+      "host_midi": "MIDI-region loop; send counter +6; instrument and Stereo Out meters show signal",
+      "recall": "pending manual reopen after computer-control timeout",
+      "capture_errors": 0,
+      "fifo_overruns": 0,
+      "fifo_underruns": 0
+    },
+    {
+      "host": "Bitwig Studio",
+      "version": "5.2.7",
+      "format": "VST3",
+      "rate": 48000,
+      "three_internal_stereo_returns": "passed",
+      "host_midi": "not confirmed in this beta pass",
+      "recall": "saved; beta reopen pending",
+      "normal_exit_restoration": "restored",
+      "capture_errors": 0,
+      "fifo_overruns": 0,
+      "fifo_underruns": 0
+    },
+    {
+      "host": "Ableton Live Suite",
+      "version": "12.4.1",
+      "format": "VST3",
+      "rate": 44100,
+      "three_internal_stereo_returns": "passed",
+      "host_midi": "computer-keyboard note-on/note-off passed",
+      "recall": "deferred by user; Live is not authorized and cannot save",
+      "manual_restoration": "16 edit buffers restored; Single mode sent",
+      "capture_errors": 0,
+      "fifo_overruns": 0,
+      "fifo_underruns": 0
+    },
+    {
+      "host": "LiveProfessor",
+      "version": "2025.1.0",
+      "format": "AUv2",
+      "rate": 48000,
+      "block": 512,
+      "three_internal_stereo_returns": "passed",
+      "host_midi": "not tested",
+      "recall": "16 sounds and routing match except TI edit metadata/checksums; parameter max difference 2.440505142420335e-8",
+      "normal_exit_restoration": "restored",
+      "capture_errors": 0,
+      "fifo_overruns": 0,
+      "fifo_underruns": 0
+    }
+  ],
+  "daw_scope": "Internal return telemetry is not a complete host auxiliary-routing or automation test. See daw-beta-validation-2026-10-15.md."
+}

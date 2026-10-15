@@ -10,6 +10,7 @@ typedef void (^VTRPatchSelectionHandler)(NSDictionary* patch);
                     resources:(NSString*)resources
                 bankDirectory:(NSString*)bankDirectory
              selectionHandler:(VTRPatchSelectionHandler)handler;
+- (void)setHardwareBuffers:(NSArray<NSData*>*)buffers;
 - (void)setDarkTheme:(BOOL)dark;
 - (void)setOriginalAppearance:(BOOL)original;
 @property(nonatomic, readonly) NSUInteger bankCount;

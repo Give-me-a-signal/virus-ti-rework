@@ -128,7 +128,7 @@ struct HardwareService::Impl {
  }
  void prepareLibrary(){
   if(libraryReady)return;
-  NSString* root=[resources() stringByAppendingPathComponent:@"PatchBanks"];
+  NSString* root=[NSHomeDirectory() stringByAppendingPathComponent:@"Library/Application Support/VirusTIRework/Patches"];
   NSArray* files=[[[NSFileManager defaultManager]enumeratorAtPath:root]allObjects];
   for(NSString* file in [files sortedArrayUsingSelector:@selector(localizedStandardCompare:)])if([file.pathExtension.lowercaseString isEqual:@"mid"]){
    auto path=[root stringByAppendingPathComponent:file];library.push_back({path,file.stringByDeletingPathExtension.UTF8String,readBank(path)});

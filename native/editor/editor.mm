@@ -1,11 +1,13 @@
 #import <Cocoa/Cocoa.h>
 #include "editor.h"
+#include "builtin_model.h"
+#include "appearance_import.h"
 #include "graphs.h"
 #include "browser.h"
 #include "browser_bank.hpp"
 #include "bitmap_layout.h"
 #include "modern_theme.h"
-#include "graph_waveforms.h"
+#include "illustrative_waves.h"
 #include "plugin.h"
 #include "public.sdk/source/common/pluginview.h"
 #include <algorithm>
@@ -91,20 +93,21 @@ NSString* bindingKey(NSString* name,NSInteger part) {return [NSString stringWith
 - (instancetype)initWithController:(Controller*)value resources:(NSString*)directory {
  if((self=[super initWithFrame:NSMakeRect(0,0,907,513)])) {
   controller=value;resourceDirectory=directory;images=[NSMutableDictionary dictionary];localValues=[NSMutableDictionary dictionary];nodeByID=[NSMutableDictionary dictionary];
-  NSData* data=[NSData dataWithContentsOfFile:[directory stringByAppendingPathComponent:@"editor-ui-catalog.json"]];
-  model=data?[NSJSONSerialization JSONObjectWithData:data options:0 error:nil]:nil;
+  model=builtinEditorModel();resourceDirectory=originalAppearanceDirectory();
   nodes=model[@"nodes"]?:@[];parameters=model[@"parameters"]?:@{};conditions=model[@"conditions"]?:@{};
   connectButton=[NSButton buttonWithTitle:@"Connect TI" target:self action:@selector(hardwareAction:)];connectButton.tag=1;connectButton.frame=NSMakeRect(5,487,90,22);[self addSubview:connectButton];
   disconnectButton=[NSButton buttonWithTitle:@"Disconnect" target:self action:@selector(hardwareAction:)];disconnectButton.tag=2;disconnectButton.frame=NSMakeRect(96,487,94,22);[self addSubview:disconnectButton];
   testButton=[NSButton buttonWithTitle:@"Test tone" target:self action:@selector(hardwareAction:)];testButton.tag=3;testButton.frame=NSMakeRect(792,487,108,22);[self addSubview:testButton];
-  connectButton.frame=NSMakeRect(10,487,78,20);disconnectButton.frame=NSMakeRect(92,487,78,20);testButton.frame=NSMakeRect(174,487,72,20);
+  connectButton.frame=NSMakeRect(10,487,78,20);disconnectButton.frame=NSMakeRect(92,487,78,20);testButton.frame=NSMakeRect(174,487,72,20);testButton.hidden=YES;
   themeButton=[NSButton buttonWithTitle:@"Dark" target:self action:@selector(changeTheme:)];themeButton.frame=NSMakeRect(686,487,91,20);[self addSubview:themeButton];
   scaleButton=[[NSPopUpButton alloc]initWithFrame:NSMakeRect(789,486,104,22) pullsDown:NO];for(NSNumber* zoom in @[@100,@125,@150,@175,@200]){[scaleButton addItemWithTitle:[NSString stringWithFormat:@"%@%%",zoom]];scaleButton.lastItem.tag=zoom.integerValue;}scaleButton.target=self;scaleButton.action=@selector(changeScale:);[self addSubview:scaleButton];
   for(NSButton* button in @[connectButton,disconnectButton,testButton,themeButton]){button.font=[NSFont systemFontOfSize:10 weight:NSFontWeightMedium];button.bezelStyle=NSBezelStyleRounded;}
-  uiStyleButton=[[NSPopUpButton alloc]initWithFrame:NSMakeRect(548,486,132,22) pullsDown:NO];[uiStyleButton addItemWithTitle:@"Modern UI"];uiStyleButton.lastItem.tag=0;[uiStyleButton addItemWithTitle:@"Original Access"];uiStyleButton.lastItem.tag=1;uiStyleButton.font=[NSFont systemFontOfSize:10];uiStyleButton.target=self;uiStyleButton.action=@selector(changeUIStyle:);uiStyleButton.toolTip=@"Choose the modern editor or the reconstructed original Access artwork";[self addSubview:uiStyleButton];
-  originalUI=[[[NSUserDefaults alloc]initWithSuiteName:@"org.virus-ti-rework.editor"]boolForKey:@"originalUI"];
+  uiStyleButton=[[NSPopUpButton alloc]initWithFrame:NSMakeRect(548,486,132,22) pullsDown:NO];[uiStyleButton addItemWithTitle:@"Modern UI"];uiStyleButton.lastItem.tag=0;[uiStyleButton addItemWithTitle:@"Original Access"];uiStyleButton.lastItem.tag=1;[uiStyleButton addItemWithTitle:@"Import Original…"];uiStyleButton.lastItem.tag=2;uiStyleButton.font=[NSFont systemFontOfSize:10];uiStyleButton.target=self;uiStyleButton.action=@selector(changeUIStyle:);uiStyleButton.toolTip=@"Choose the modern editor or the reconstructed original Access artwork";[self addSubview:uiStyleButton];
+  NSUserDefaults* appearancePrefs=[[NSUserDefaults alloc]initWithSuiteName:@"org.virus-ti-rework.editor"];
+  originalUI=!getenv("VTR_EDITOR_TEST_DEFAULTS")&&[[appearancePrefs stringForKey:@"appearance"] isEqual:@"original"];
+  if(originalUI){NSDictionary* imported=originalAppearanceModel(originalAppearanceDirectory(),nullptr);if(imported){model=imported;nodes=model[@"nodes"];parameters=model[@"parameters"];conditions=model[@"conditions"];}else originalUI=NO;}
   themeButton.toolTip=@"Switch between Virus Dark and Polar light themes";scaleButton.toolTip=@"Editor scale — the layout stays proportional";
-  darkTheme=![[[NSUserDefaults alloc]initWithSuiteName:@"org.virus-ti-rework.editor"]boolForKey:@"polarTheme"];
+  darkTheme=getenv("VTR_EDITOR_TEST_DEFAULTS")||![[[NSUserDefaults alloc]initWithSuiteName:@"org.virus-ti-rework.editor"]boolForKey:@"polarTheme"];
   selectedPart=0;selectedPage=0;selectedSection=0;selectedUtility=0;dragID=kNoParamId;graphHandle=-1;
   graphEditIDs=[NSMutableSet set];patchNames=[NSMutableDictionary dictionary];
   for(NSDictionary* node in nodes)if(node[@"id"])nodeByID[node[@"id"]]=node;
@@ -112,7 +115,7 @@ NSString* bindingKey(NSString* name,NSInteger part) {return [NSString stringWith
   for(const auto& spec:kCatalog)bindings[std::string([bindingKey(@(spec.name),spec.part-1) UTF8String])]=spec.id;
   if(model){
    __weak VTRNativeEditor* weak=self;
-   NSString* banks=[[directory stringByDeletingLastPathComponent]stringByAppendingPathComponent:@"PatchBanks"];
+   NSString* banks=[NSHomeDirectory() stringByAppendingPathComponent:@"Library/Application Support/VirusTIRework/Patches"];
    browser=[[VTRPatchBrowserView alloc]initWithFrame:NSMakeRect(192,45,705,426) resources:directory bankDirectory:banks selectionHandler:^(NSDictionary* patch){[weak recallPatch:patch];}];
    browser.hidden=YES;[self addSubview:browser];
    [self applyAppearance];
@@ -122,7 +125,7 @@ NSString* bindingKey(NSString* name,NSInteger part) {return [NSString stringWith
 }
 - (void)viewDidMoveToWindow {
  [refresh invalidate];refresh=nil;
- if(self.window){__weak VTRNativeEditor* weak=self;refresh=[NSTimer scheduledTimerWithTimeInterval:0.1 repeats:YES block:^(NSTimer*){VTRNativeEditor* strong=weak;if(strong){strong->controller->hardwareCommand(0);[strong synchronizeHardwarePatch];[strong setNeedsDisplay:YES];}}];}
+ if(self.window){__weak VTRNativeEditor* weak=self;refresh=[NSTimer scheduledTimerWithTimeInterval:0.1 repeats:YES block:^(NSTimer*){VTRNativeEditor* strong=weak;if(strong){if(strong->originalUI&&![[NSFileManager defaultManager]fileExistsAtPath:[originalAppearanceDirectory() stringByAppendingPathComponent:@"editor.xml"]]){[strong->uiStyleButton selectItemWithTag:0];[strong changeUIStyle:strong->uiStyleButton];}strong->controller->hardwareCommand(0);[strong synchronizeHardwarePatch];[strong setNeedsDisplay:YES];}}];}
 }
 - (void)hardwareAction:(NSButton*)sender {controller->hardwareCommand(int(sender.tag));}
 - (void)dealloc { [refresh invalidate];if(dragID!=kNoParamId)controller->endEdit(dragID);for(NSNumber* identifier in graphEditIDs)controller->endEdit(identifier.unsignedIntValue); }
@@ -167,6 +170,7 @@ NSString* bindingKey(NSString* name,NSInteger part) {return [NSString stringWith
 }
 - (BOOL)visible:(NSDictionary*)node {
  NSInteger part=[self partOf:node];
+ if(node[@"page"]&&[node[@"page"]integerValue]>=0&&[node[@"page"]integerValue]!=selectedPage)return NO;
  if(![self condition:node[@"attrs"][@"Condition"] part:part])return NO;
  id parent=node[@"parent_id"];
  if(parent&&parent!=[NSNull null]){NSDictionary* n=nodeByID[parent];if(n)return [self visible:n];}
@@ -227,6 +231,7 @@ NSString* bindingKey(NSString* name,NSInteger part) {return [NSString stringWith
   NSString* note=[type isEqual:@"ArpEdit"]?@"Pattern editor reconstruction pending":@"Library / hardware data unavailable offline";
   [note drawInRect:NSInsetRect(rect,12,12) withAttributes:@{NSFontAttributeName:[NSFont systemFontOfSize:11],NSForegroundColorAttributeName:NSColor.lightGrayColor}];
  }
+ if(parameter.length&&![self editable:node]&&([type containsString:@"Knob"]||[type containsString:@"Menu"]||[type containsString:@"Button"]||[type containsString:@"Slider"])){[[NSColor colorWithWhite:.45 alpha:.38]setFill];NSRectFillUsingOperation(rect,NSCompositingOperationSourceOver);}
  [NSGraphicsContext restoreGraphicsState];
 }
 #include "modern_editor.inc"
@@ -256,12 +261,12 @@ NSString* bindingKey(NSString* name,NSInteger part) {return [NSString stringWith
  if([a[@"Enabled"] isEqual:@"false"])return NO;
  id ancestor=node[@"parent_id"];
  while(ancestor&&ancestor!=[NSNull null]){NSDictionary* parent=nodeByID[ancestor];if(!parent)break;if([parent[@"attrs"][@"Enabled"] isEqual:@"false"])return NO;ancestor=parent[@"parent_id"];}
- if(Graphs::supports(type))return YES;
+ if(Graphs::supports(type))return NO; // Illustrative beta graphs do not imply hardware support.
  if([name isEqual:@"VirusControl/Selected Section"]||[name isEqual:@"VirusControl/SelectedPage"]||[name isEqual:@"VirusControl/SelectedUtilityPage"]||[name isEqual:@"Multi Parameters/Panel Part"])return YES;
  ParamID id=[self paramID:name part:[self partOf:node]];auto* p=id==kNoParamId?nullptr:controller->getParameterObject(id);
- if(p)return !(p->getInfo().flags&ParameterInfo::kIsReadOnly);
+ if(p){for(const auto& c:kCatalog)if(c.id==id)return c.midiCC>=0&&c.resolved&&std::strstr(c.name,"Wavetable")==nullptr&&std::strstr(c.name,"HyperSaw")==nullptr&&std::strstr(c.name,"Vocoder")==nullptr;return NO;}
  NSDictionary* definition=[self definition:name];
- return [definition[@"part"] isEqual:@"all"]&&[definition[@"maxValue"] doubleValue]>[definition[@"minValue"] doubleValue]&&![name hasPrefix:@"Internal "]&&![name hasPrefix:@"VirusControl/"]&&![name hasPrefix:@"LockView/"]&&![name hasPrefix:@"Soft Knobs/"];
+ return NO;
 }
 - (BOOL)point:(NSPoint)point insideNode:(NSDictionary*)node {
  if(!NSPointInRect(point,rectOf(node[@"absolute_rect"])))return NO;
@@ -307,6 +312,7 @@ NSString* bindingKey(NSString* name,NSInteger part) {return [NSString stringWith
   selectedPart=part;[self loadOfflinePatch:@{@"name":@(patch.name.c_str()),@"verifiedValues":values}];
  }catch(const std::exception&){}
  suppressPresetAutomation=NO;selectedPart=previousPart;displayedPatchRevision=controller->patchRevision;
+ NSMutableArray* buffers=[NSMutableArray array];for(auto& bytes:controller->hardwarePatches.parts)[buffers addObject:[NSData dataWithBytes:bytes.data() length:bytes.size()]];[browser setHardwareBuffers:buffers];
 
 }
 - (void)loadOfflinePatch:(NSDictionary*)patch {
@@ -389,7 +395,7 @@ NSString* bindingKey(NSString* name,NSInteger part) {return [NSString stringWith
 - (void)mouseMoved:(NSEvent*)event {
  NSPoint point=[self convertPoint:event.locationInWindow fromView:nil];hovered=nil;
  for(NSDictionary* node in [nodes reverseObjectEnumerator])if([self visible:node]&&NSPointInRect(point,rectOf(node[@"absolute_rect"]))&&node[@"attrs"][@"Parameter"]){hovered=node;break;}
- self.toolTip=hovered?([hovered[@"type"]isEqual:@"VUSlider"]?@"MIDI note activity with CC7 volume handle. Not an audio dB meter.":hovered[@"attrs"][@"Parameter"]):nil;[self setNeedsDisplay:YES];
+ self.toolTip=hovered?([hovered[@"type"]isEqual:@"VUSlider"]?@"MIDI note activity with CC7 volume handle. Not an audio dB meter.":[self editable:hovered]?hovered[@"attrs"][@"Parameter"]:[hovered[@"attrs"][@"Parameter"] stringByAppendingString:@" — hardware editing unavailable in this beta"]):nil;[self setNeedsDisplay:YES];
 }
 - (void)keyDown:(NSEvent*)event {
  if(event.keyCode==53){focused=nil;[self setNeedsDisplay:YES];return;}
