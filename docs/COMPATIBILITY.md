@@ -17,6 +17,16 @@ This is a record of bounded observations, not a universal support list.
 | Same project TI Desktop | Same test workstation; do not infer other Macs | Native test host; 48 kHz / 256, 44.1 kHz / 64, 96 kHz / 512 | [Hardware matrix](hardware-matrix-2026-10-12.md): scope differs by rate; includes three returns and bounded counter/audio tests |
 | No device required | Apple silicon / macOS 26.2 | Local build and offline tests | [14 October source packaging verification](repository-verification.json); a build result is not a new connected-hardware test |
 
+## Packaged 0.2.0-beta.1 host checks
+
+On 15 October 2026, the packaged beta was smoke-tested on an **M1 Pro / macOS
+26.2 (25C56) / TI Desktop** with Logic Pro 12.4 (AU), Bitwig 5.2.7 (VST3),
+Ableton Live 12.4.1 (VST3) and LiveProfessor 2025.1.0 (AU). All four processed
+real TI audio on three internal stereo returns. Host MIDI, save/reopen, auxiliary
+routing and recovery coverage differ by host: read the [bounded test report](daw-beta-validation-2026-10-15.md)
+before treating a stage as verified. Ableton save/reopen is deferred because
+Live is not authorized on this test workstation.
+
 ## Coverage wanted
 
 | Axis | Useful new coverage |
@@ -24,7 +34,7 @@ This is a record of bounded observations, not a universal support list.
 | Apple chips | Different M-series generations; base, Pro, Max and Ultra where available. Record exact model. |
 | macOS | Exact major/point/build versions from macOS 12 upward. Older releases, current updates and beta reports remain distinct. |
 | Virus hardware | Additional TI Desktops; TI Keyboard/Polar; TI2 variants. Snow needs a separate topology assessment before device-write tests. |
-| Hosts | Native VST3 hosts and versions beyond the recorded baseline, plus regressions on host updates. Logic/AU is outside the current VST3 release. |
+| Hosts | Native VST3 hosts and versions beyond the recorded baseline, plus regressions on host updates. AUv2 coverage is recorded separately for the downloadable beta; GarageBand remains untested. |
 | Connections | Direct USB versus specific hubs/docks/adapters, different host audio interfaces and block sizes. |
 
 No community rows have been accepted yet. Add them by PR with a linked test issue:

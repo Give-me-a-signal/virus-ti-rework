@@ -62,8 +62,9 @@ optional appearance resources or recovery evidence.
 
 Apple Silicon Mac, macOS 12 deployment target, an AUv2 or arm64 VST3 host, and physical Virus TI hardware.
 A deployment target does not establish compatibility with every OS or host. TI Desktop is the initial hardware
-validation target; TI2/Snow remain unverified. AU validator results and test-host checks do not establish
-Logic/GarageBand compatibility: real host reports are tracked separately. See [compatibility](docs/COMPATIBILITY.md).
+validation target; TI2/Snow remain unverified. The packaged beta has bounded smoke-test results for Logic Pro,
+Bitwig, Ableton Live and LiveProfessor on M1 Pro/macOS 26.2. Coverage differs by host; GarageBand remains
+untested. Read the [host test report](docs/daw-beta-validation-2026-10-15.md) and [compatibility matrix](docs/COMPATIBILITY.md).
 
 ### Optional Original Access appearance
 

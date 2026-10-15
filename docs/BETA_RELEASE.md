@@ -23,8 +23,10 @@ No Access artwork, factory patches, firmware or executable code is bundled.
 
 This remains a beta: some controls are disabled pending hardware implementation,
 MIDI timing is not sample accurate, and compatibility is specific to reported
-setups. TI Desktop is the initial target; TI2/Snow are unverified. AU validation
-and our test host do not establish Logic/GarageBand compatibility.
+setups. TI Desktop is the initial target; TI2/Snow are unverified. The packaged
+beta has bounded Logic Pro, Bitwig, Ableton Live and LiveProfessor smoke tests
+on M1 Pro/macOS 26.2; see `docs/daw-beta-validation-2026-10-15.md` for the tested
+stages and outstanding work. GarageBand remains untested.
 
 Use a disposable project and keep the TI powered and connected while restoration
 finishes after disconnect or host exit. No firmware updates, stored-bank writes
