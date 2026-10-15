@@ -124,8 +124,9 @@ untested. Read the [host test report](docs/daw-beta-validation-2026-10-15.md) an
 **Snow:** [issue #8](https://github.com/Give-me-a-signal/virus-ti-rework/issues/8) reports
 that the published beta rejects its `Virus TI Snow` audio name. The source change
 documented in the [model audit](docs/device-model-audit.md) recognizes that name,
-but deliberately disables connection: Snow's four-part recall and recovery path
-is not implemented or hardware-validated. This is not a Snow playback release.
+but deliberately disables connection. The separate [four-part implementation](docs/snow-four-part-recall.md)
+has offline regression coverage; Snow's physical initialization, routing and
+recovery sequence remain unverified. This is not a Snow playback release.
 The audit also covers TI/TI2 Desktop, Keyboard and Polar discovery names; those
 additional models remain unverified.
 

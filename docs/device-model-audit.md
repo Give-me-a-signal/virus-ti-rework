@@ -2,6 +2,10 @@
 
 ## Scope and result
 
+This audit records the detection-only change and its sixteen-part baseline.
+The separate [guarded four-part follow-up](snow-four-part-recall.md) adds offline
+data handling; it does not enable Snow hardware connection.
+
 [Issue #8](https://github.com/Give-me-a-signal/virus-ti-rework/issues/8) reports
 `Virus TI Snow` in macOS Audio, while Rework says USB audio is absent. The
 published 0.2.0-beta.1 source matches only the exact audio name `Virus TI`.

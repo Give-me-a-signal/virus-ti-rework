@@ -1,5 +1,6 @@
 #pragma once
 #include "browser_bank.hpp"
+#include "device_profile.h"
 #include <array>
 namespace VirusRework {
 using PatchBytes=std::vector<uint8_t>;
@@ -13,5 +14,17 @@ inline void validateMulti(const PatchBytes& p){
  unsigned sum=0;for(size_t i=1;i<266;++i){if(p[i]>=128)throw std::runtime_error("Invalid multi data");if(i>=5&&i<265)sum+=p[i];}if((sum&127)!=p[265])throw std::runtime_error("Multi checksum failed");
 }
 inline void multiChecksum(PatchBytes& p){unsigned sum=0;for(size_t i=5;i<265;++i)sum+=p[i];p[265]=sum&127;}
-inline ProjectPatches normalizeProject(const ProjectPatches& source){auto result=source;for(unsigned p=0;p<16;++p)if(!result.parts[p].empty())result.parts[p]=virus::patches::ram_single(virus::patches::parse_single(result.parts[p]),p);if(!result.multi.empty())validateMulti(result.multi);return result;}
+inline ProjectPatches normalizeProject(const ProjectPatches& source,DeviceModel model=DeviceModel::ti16){
+ const auto count=partCount(model);
+ for(unsigned p=count;p<source.parts.size();++p)if(!source.parts[p].empty())throw std::runtime_error("Project contains parts outside connected device profile");
+ auto result=source;for(unsigned p=0;p<count;++p)if(!result.parts[p].empty())result.parts[p]=virus::patches::ram_single(virus::patches::parse_single(result.parts[p]),p);if(!result.multi.empty())validateMulti(result.multi);return result;
+}
+inline bool sameMulti(const PatchBytes& actual,const PatchBytes& expected,DeviceModel model){
+ validateMulti(actual);validateMulti(expected);partCount(model);
+ // Existing TI flag normalization is observed on hardware. Do not silently
+ // apply it to Snow: there is no Snow readback evidence for that exception.
+ if(model==DeviceModel::snow4)return actual==expected;
+ for(size_t i=0;i<expected.size();++i)if(i!=10&&i!=265&&actual[i]!=expected[i])return false;
+ return true;
+}
 }

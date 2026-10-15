@@ -36,6 +36,10 @@ add_executable(device_identity_tests ../device-identity/tests/device_identity_te
 target_include_directories(device_identity_tests PRIVATE ../device-identity/include)
 target_compile_options(device_identity_tests PRIVATE -UNDEBUG)
 add_test(NAME device_identity_tests COMMAND device_identity_tests)
+add_executable(device_profile_tests device_profile_tests.cpp ../editor/browser_bank.cpp)
+target_include_directories(device_profile_tests PRIVATE ../editor)
+target_compile_options(device_profile_tests PRIVATE -UNDEBUG)
+add_test(NAME device_profile_tests COMMAND device_profile_tests)
 
 set_target_properties(VirusTIRework PROPERTIES
  MACOSX_BUNDLE_GUI_IDENTIFIER "org.virus-ti-rework.development.vst3"
@@ -114,6 +118,8 @@ add_executable(restoration_tests restoration_tests.cpp ../editor/browser_bank.cp
 target_include_directories(restoration_tests PRIVATE ../editor)
 target_compile_definitions(restoration_tests PRIVATE STOCK_PROBE="${STOCK_PROBE}" RESTORE_HELPER="$<TARGET_FILE:virus-ti-restoration-helper>")
 add_dependencies(restoration_tests virus-ti-restoration-helper)
+target_compile_definitions(device_profile_tests PRIVATE RESTORE_HELPER="$<TARGET_FILE:virus-ti-restoration-helper>")
+add_dependencies(device_profile_tests virus-ti-restoration-helper)
 target_compile_options(restoration_tests PRIVATE -UNDEBUG)
 add_test(NAME restoration_tests COMMAND restoration_tests)
 
