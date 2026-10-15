@@ -39,6 +39,8 @@ int main(){
   assert(timeline.latencyHost()==unsigned(std::ceil(timeline.latencyDevice()*rate/48000)));
  }
  auto packets=timedPackets({0x90,60,1},16383);assert((packets==std::vector<uint8_t>{0x53,0xf5,127,127,0x29,0x90,60,1}));
+ assert(timedBatchPackets({{{0x90,60,1},16383,false},{{0x80,60,0},0,false}}).size()==16);
+ bool oversized=false;try{timedBatchPackets(std::vector<TimedMessage>(33,{{0x90,60,1},0,false}));}catch(...){oversized=true;}assert(oversized);
  for(auto command:{ClockCommand::activeSense,ClockCommand::songPosition,ClockCommand::tick,ClockCommand::calibrationPing})assert(!timedPackets(clockMessage(command),3072,true).empty());
  for(const auto& bad:std::vector<std::vector<uint8_t>>{{0xf0,0,0x20,0x33,1,16,0x50,0,0,0xf7},{0xf0,0,0x20,0x33,1,16,0x73,0,0x22,1,0xf7},{0xf8,1},{0xff},{0xf5,1,2}}){
   bool rejected=false;try{timedPackets(bad,0,true);}catch(...){rejected=true;}assert(rejected);

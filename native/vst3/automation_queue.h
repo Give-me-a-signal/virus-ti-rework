@@ -15,6 +15,7 @@ class AutomationQueue {
 public:
     static constexpr int MAX = 4096; // > the number of automatable parameters: each is queued at most once
     explicit AutomationQueue(double rate = 250, double burst = 64) : rate_(rate), burst_(burst) {}
+    void reset() noexcept { head_ = 0; count_ = 0; budget_ = 0; }
 
     // a parameter got a new value and was not waiting yet (the caller keeps the "waiting" flag); false if full
     bool push(uint32_t id)

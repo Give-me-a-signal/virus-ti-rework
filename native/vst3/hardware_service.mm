@@ -38,6 +38,7 @@ public:
  HardwareMidi(){midi.usePrivate();}
  void send(const PatchBytes& p)override{midi.send(p);}
  void sendTimed(const PatchBytes& p,uint16_t stamp,bool clock)override{midi.sendTimed(p,stamp,clock);}
+ void sendTimedBatch(const std::vector<TimedMessage>& batch)override{midi.sendTimedBatch(batch);}
  PatchBytes single(uint8_t part,const std::function<void()>& idle)override{return midi.single(part,idle);}
  PatchBytes multi()override{return midi.multi();}
  void saveTraffic(const std::string& path)override{midi.savePrivate(@(path.c_str()));}
@@ -287,10 +288,10 @@ struct HardwareService::Impl {
   if(desired.multi.empty())for(unsigned p=0;p<16;++p){routing[73+p]=p;routing[89+p]=0;routing[105+p]=127;routing[153+p]=127;routing[169+p]=127;routing[185+p]=10;routing[249+p]|=1;}
   multiChecksum(routing);sendMidi(routing);pause(multiSettleMs);
   auto actualMulti=midi->multi();verifyMultiRecall(routing,actualMulti);{std::lock_guard<std::mutex> g(stateLock);loaded.multi=actualMulti;}
-  const auto callbacksBeforeStart=callbacks.load();
+  const auto callbacksBeforeStart=callbacks.load(),framesBeforeStart=capture.newest();
   if(!emulator)check(AudioDeviceStart(device,proc),"Start TI capture");live=true;
   for(unsigned p=0;p<16;++p){auto source=desired.parts[p].empty()?(p==0?single:original.parts[p]):desired.parts[p];load(source,p);}
-  if(!emulator&&callbacks.load()==callbacksBeforeStart)throw std::runtime_error("No TI capture callbacks; check host microphone permission and audio availability");
+  if(!emulator&&(callbacks.load()==callbacksBeforeStart||capture.newest()==framesBeforeStart))throw std::runtime_error("No TI capture callbacks; check host microphone permission and audio availability");
   replayVolumes();{std::lock_guard<std::mutex> g(stateLock);staged={};}
   // The TI can emit an initialization transient while routing/edit buffers settle.
   // Keep the host silent until preparation completes; beginBlock then re-primes.
@@ -349,15 +350,18 @@ struct HardwareService::Impl {
   if((changed||unsafe)&&midi&&live){for(unsigned p=0;p<16;++p){sendMidi({uint8_t(0xb0|p),64,0});sendMidi({uint8_t(0xb0|p),123,0});}}
   std::array<PerformanceEvent,4096> ready{};auto count=performance.take(ready.data(),ready.size());
   std::stable_sort(ready.begin(),ready.begin()+count,PerformanceQueue::before);
+  std::vector<TimedMessage> batch;batch.reserve(32);
+  auto flush=[&]{if(!batch.empty()){midi->sendTimedBatch(batch);batch.clear();}};
   for(unsigned i=0;i<count;++i){const auto& e=ready[i];
    if(unsafe||!bridge.ready()||!live||!outputReady||!hostProcessing||e.generation!=generation||int(e.bytes[0]&15)==mutedPart){++performance.dropped;continue;}
    PatchBytes bytes=e.clock?(e.bytes[0]==0xf2?PatchBytes(e.bytes.begin(),e.bytes.end()):PatchBytes{e.bytes[0]}):PatchBytes(e.bytes.begin(),e.bytes.end());
    if(e.frame>=0&&syncState.load()==virus::clock::SyncState::locked){uint16_t stamp=0;
-    if(virus::clock::MarkerTimeline::stamp(e.frame,marker.validMarker(),capture.newest(),stamp))midi->sendTimed(bytes,stamp,e.clock);
-    else{++lateEvents;if(!e.clock){auto type=e.bytes[0]&0xf0;if(type==0x80||(type==0x90&&e.bytes[2]==0))sendMidi(bytes);else ++performance.dropped;}continue;}
-   }else if(!e.clock)sendMidi(bytes);
+    if(virus::clock::MarkerTimeline::stamp(e.frame,marker.validMarker(),capture.newest(),stamp)){batch.push_back({bytes,stamp,e.clock});if(batch.size()==32)flush();}
+    else{++lateEvents;if(!e.clock){auto type=e.bytes[0]&0xf0;if(type==0x80||(type==0x90&&e.bytes[2]==0)){flush();sendMidi(bytes);}else ++performance.dropped;}continue;}
+   }else if(!e.clock){flush();sendMidi(bytes);}
    if(!e.clock){++notesSent;midiActivity.midi(bytes.data(),bytes.size());if((bytes[0]&0xf0)==0xb0&&bytes[1]==7)partVolumes[bytes[0]&15]=bytes[2];}
   }
+  flush();
  }
  void drainMidi(){
   drainPerformance();

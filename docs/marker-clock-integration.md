@@ -26,7 +26,8 @@ The device timeline starts 4,096 frames behind the newest captured frame, with
 2,048 frames of transmission lead. The capture margin is
 `max(2 * ceil(maximum_host_block * 48000 / host_rate), 1024)` plus 32 frames
 of resampler look-ahead. Reported host latency uses the same device-frame model.
-MIDI offsets derive from the actual fractional resampler read position/rate, so
+USB writes batch at most 32 timestamp/message pairs, validating every message before
+submission and preserving packet order. MIDI offsets derive from the actual fractional resampler read position/rate, so
 audio and MIDI do not apply unrelated drift corrections. The private 14-bit
 deadline must remain in the unambiguous future horizon (<8,192 frames).
 

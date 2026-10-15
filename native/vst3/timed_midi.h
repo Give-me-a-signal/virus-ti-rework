@@ -6,6 +6,7 @@
 #include <vector>
 namespace VirusRework {
 enum class ClockCommand { activeSense, songPosition, tick, calibrationPing };
+struct TimedMessage {std::vector<uint8_t> bytes;uint16_t stamp;bool clock=false;};
 inline std::vector<uint8_t> clockMessage(ClockCommand command,unsigned value=0){
  switch(command){
   case ClockCommand::activeSense:return {0xfe};
@@ -24,5 +25,11 @@ inline std::vector<uint8_t> timedPackets(const std::vector<uint8_t>& message,uin
  std::vector<virus::midi::USBMidiPacket> encoded(message.size()/3+1);size_t count=0;
  if(virus::midi::encode_usb_midi1_message(2,message.data(),message.size(),encoded.data(),encoded.size(),count)!=virus::midi::USBMidiResult::ok)throw std::runtime_error("Invalid timed MIDI");
  std::vector<uint8_t> output(word.begin(),word.end());for(size_t i=0;i<count;++i)output.insert(output.end(),encoded[i].begin(),encoded[i].end());return output;
+}
+inline std::vector<uint8_t> timedBatchPackets(const std::vector<TimedMessage>& batch){
+ if(batch.empty()||batch.size()>32)throw std::runtime_error("Invalid timed batch size");
+ std::vector<uint8_t> result;
+ for(const auto& m:batch){auto words=timedPackets(m.bytes,m.stamp,m.clock);result.insert(result.end(),words.begin(),words.end());}
+ return result; // every message validated before any USB submission
 }
 }

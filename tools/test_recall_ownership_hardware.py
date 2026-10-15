@@ -59,6 +59,7 @@ def main():
     try:
         owner, endpoint = launch(args.format)
         status = wait(endpoint, 'connect'); assert status['connected'] and status['device_lease_held']
+        initial_counters = status['lifetime_counters'].copy()
         session = Path(status['snapshot_directory']); report['session'] = str(session); report['connected'] = status; persist()
         assert len(list(session.glob('before-*.syx'))) == 18
         if args.timing: assert status['timing_status'] == 'locked', 'Marker calibration did not lock; stop without further writes'
@@ -84,6 +85,9 @@ def main():
             assert list(map(sound, parts)) == list(map(sound, expected))
             assert all(a == b for i, (a, b) in enumerate(zip(multi, routing)) if i not in (10, 265))
             report['recalls'].append({'cycle': cycle + 1, 'sixteen_sounds_and_routing_match': True}); persist()
+        final_status = request(endpoint, 'status')
+        for counter in ('capture_errors', 'fifo_overruns', 'fifo_underruns'):
+            assert final_status['lifetime_counters'][counter] == initial_counters[counter], (counter, final_status)
         wait(endpoint, 'disconnect'); report['manual_restore'] = verify_restore(session, False); persist()
         # A new connection preserves a fresh baseline for normal-exit recovery.
         status = wait(endpoint, 'connect'); session = Path(status['snapshot_directory']); report['exit_session'] = str(session); persist()

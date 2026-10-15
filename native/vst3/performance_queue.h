@@ -26,7 +26,7 @@ public:
  std::atomic<uint64_t> overflow{0},dropped{0},coalesced{0};
  std::atomic<bool> panic{false};
  void begin(uint64_t generation,bool enabled,bool locked,double start,double step,unsigned samples,double rate)noexcept{
-  if(generation!=generation_||!enabled){automation_=AutomationQueue{};for(auto& c:controls_)c.waiting=false;}
+  if(generation!=generation_||!enabled){automation_.reset();for(auto& c:controls_)c.waiting=false;}
   generation_=generation;enabled_=enabled;locked_=locked;start_=start;step_=step;samples_=samples;++serial_;order_=0;automation_.refill(samples,rate);
  }
  bool publish(unsigned offset,const std::array<uint8_t,3>& bytes,bool clock=false,unsigned priority=1,double shift=0)noexcept{

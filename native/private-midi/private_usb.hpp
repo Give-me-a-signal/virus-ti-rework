@@ -104,7 +104,10 @@ public:
   for(size_t pos=0;pos<n*4;pos+=32){std::vector<uint8_t> fragment(p+pos,p+std::min(pos+32,n*4));transfer(out_,fragment,1000,false);std::lock_guard<std::mutex> g(logLock_);rawWrites_.push_back(fragment);}
  }
  void sendTimed(const std::vector<uint8_t>& bytes,uint16_t stamp,bool clock=false){
-  const auto packets=VirusRework::timedPackets(bytes,stamp,clock);
+  sendTimedBatch({{bytes,stamp,clock}});
+ }
+ void sendTimedBatch(const std::vector<VirusRework::TimedMessage>& batch){
+  const auto packets=VirusRework::timedBatchPackets(batch);
   std::lock_guard<std::mutex> writer(writeLock_);
   for(size_t pos=0;pos<packets.size();pos+=32){
    std::vector<uint8_t> fragment(packets.begin()+pos,packets.begin()+std::min(pos+32,packets.size()));
