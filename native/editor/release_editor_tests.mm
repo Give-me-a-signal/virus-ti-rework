@@ -13,6 +13,12 @@ int main(int argc,char** argv){@autoreleasepool{
    if(zoom==100){NSString* path=[NSString stringWithFormat:@"%s/%@-%02d.png",argv[2],theme?@"polar":@"dark",page];assert([[bitmap representationUsingType:NSBitmapImageFileTypePNG properties:@{}]writeToFile:path atomically:YES]);}
   }
  }}
+ assert(view->testButton.hidden==!snowPlaybackTestBuild);
+ controller.hardwarePartCount=4;
+ for(NSDictionary* n in view->nodes)if([n[@"attrs"][@"Parameter"]isEqual:@"Multi Parameters/Panel Part"]&&[n[@"attrs"][@"OnValue"]integerValue]>=4)assert(![view editable:n]);
+ view->selectedPart=15;view->selectedPage=2;
+ for(int theme=0;theme<2;++theme){view->darkTheme=theme==0;[view applyAppearance];for(int zoom:{100,150,200}){[view setEditorSize:NSMakeSize(907*zoom/100.,513*zoom/100.)];NSBitmapImageRep* image=[view bitmapImageRepForCachingDisplayInRect:view.bounds];[view cacheDisplayInRect:view.bounds toBitmapImageRep:image];assert(view->selectedPart==3);if(zoom==100){NSString* path=[NSString stringWithFormat:@"%s/snow-%@.png",argv[2],theme?@"polar":@"dark"];assert([[image representationUsingType:NSBitmapImageFileTypePNG properties:@{}]writeToFile:path atomically:YES]);}}}
+ controller.hardwarePartCount=16;view->selectedPart=0;
  view->selectedPage=3;NSDictionary* cutoff=nil;for(NSDictionary* n in view->nodes)if([n[@"attrs"][@"Parameter"]isEqual:@"Filter 1/Cutoff"]&&[n[@"type"]containsString:@"Knob"])cutoff=n;assert(cutoff&&[view visible:cutoff]&&[view editable:cutoff]);[view applyNode:cutoff plain:63 gesture:YES];assert([view plain:@"Filter 1/Cutoff" part:0]==63);
  view->selectedPage=2;for(NSDictionary* n in view->nodes)if([n[@"attrs"][@"Parameter"]isEqual:@"Oscillator 1/Mode"]){assert(![view editable:n]);}
  assert(!controller.hardwareConnected);assert(!originalAppearanceModel(@"/nonexistent/vtr-appearance",nullptr));

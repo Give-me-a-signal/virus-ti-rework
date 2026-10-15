@@ -1,9 +1,11 @@
 # Snow four-part recall — guarded implementation
 
 This follows the [detection audit](device-model-audit.md) and [issue #8](https://github.com/Give-me-a-signal/virus-ti-rework/issues/8).
-**Snow remains unverified and connection is disabled.** Four-part data handling
-is implemented and tested offline. The service and restoration helper still
-refuse physical Snow sessions; this does not replace the published beta.
+**Snow remains unverified and the normal build blocks connection.** Four-part
+data handling has offline and [local firmware-emulator coverage](snow-emulator-validation-2026-10-15.md).
+A separately compiled [playback preview](SNOW_TEST_BUILD.md) permits explicit
+per-session Snow tests after stable current-format originals and helper readiness
+validate. It does not replace the normal beta or establish physical compatibility.
 
 ## Implemented behavior
 
@@ -24,8 +26,9 @@ refuse physical Snow sessions; this does not replace the published beta.
 - Share model-bounded manual/helper restoration and preflight. Continue bounded
   readback evidence after a failed part write, then report the error. Snow
   comparisons are strict; TI normalization exceptions do not automatically apply.
-- Refuse even valid Snow recovery files before CoreMIDI/USB creation. No user
-  setting or environment-variable bypass is provided.
+- Normal builds refuse Snow recovery files. The preview helper also requires the
+  explicit test-consent record in a complete validated snapshot. No installed
+  standard-build setting or environment variable bypasses its guard.
 
 The editor retains its layout and the host retains existing buses/parameters.
 A usable Snow-specific editor/part selector and physical returns still need
@@ -73,8 +76,8 @@ Before enabling hardware connection:
 2. Establish USB/MIDI identity, capture stream, returns and selector 64; capture
    and validate all originals before any RAM write.
 3. Validate mode/USB initialization, routing, part references, flags and recovery.
-   TI global normalization commands in the shared transaction are not established
-   Snow behavior; keep the hardware guard until resolved.
+   The preview uses declared Snow Multi mode 1 and avoids the TI-only USB global
+   normalization command. Keep normal-build Snow support blocked until validated.
 4. With an owner and reviewed bounded test build, check reversible edits, ten
    recalls, inactive-channel refusal, manual disconnect and helper recovery with
    full comparisons. No firmware, bank writes or USB resets.

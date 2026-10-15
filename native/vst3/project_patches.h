@@ -27,4 +27,10 @@ inline bool sameMulti(const PatchBytes& actual,const PatchBytes& expected,Device
  for(size_t i=0;i<expected.size();++i)if(i!=10&&i!=265&&actual[i]!=expected[i])return false;
  return true;
 }
+inline ProjectPatches normalizeSnowPlaybackProject(const ProjectPatches& source){
+ auto result=normalizeProject(source,DeviceModel::snow4);
+ for(unsigned p=0;p<4;++p){const auto& patch=result.parts[p];if(!patch.empty()&&(patch.size()!=524||patch[9]<12))throw std::runtime_error("Legacy Snow project patch blocked before write");}
+ if(!result.multi.empty())for(unsigned p=0;p<4;++p)if(result.multi[185+p]!=10&&result.multi[185+p]!=13)throw std::runtime_error("Snow project must use USB1/2 stereo routing");
+ return result;
+}
 }

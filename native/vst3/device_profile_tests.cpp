@@ -1,6 +1,8 @@
 #include "restoration.h"
 #include "project_recall.h"
 #include "midi_safety.h"
+#include "device_lease.h"
+#include "../private-midi/dump_transaction.h"
 #include <cassert>
 #include <filesystem>
 #include <iostream>
@@ -48,10 +50,23 @@ int main(){
  requirePart(DeviceModel::snow4,3);rejects([]{requirePart(DeviceModel::snow4,4);},"outside");
  rejects([]{partCount(static_cast<DeviceModel>(99));},"Unknown");
  requireVerifiedProfile(DeviceModel::ti16);rejects([]{requireVerifiedProfile(DeviceModel::snow4);},"unverified");
+ if(snowPlaybackTestBuild)requireVerifiedProfile(DeviceModel::snow4,true);else rejects([]{requireVerifiedProfile(DeviceModel::snow4,true);},"unverified");
+ const PatchBytes snowMode{0xf0,0,32,51,1,16,0x73,0,122,1,0xf7};
+ rejects([&]{validateMidi(snowMode);},"Blocked");validateMidi(snowMode,true);
+ validateSnowTestMidi(snowMode);validateSnowTestMidi({0x93,60,60});
+ rejects([]{validateSnowTestMidi({0x94,60,60});},"four parts");
+ rejects([]{validateSnowTestMidi({0xf0,0,32,51,1,16,0x73,0,9,1,0xf7});},"Unverified Snow global");
+ rejects([]{validateSnowTestMidi({0xf0,0,32,51,1,16,0x73,0,122,3,0xf7});},"Unverified Snow global");
+ rejects([]{validateSnowTestMidi({0xf0,0,32,51,1,16,0x72,0,41,16,0xf7});},"USB1/2");
+ rejects([]{validateSnowTestMidi({0xf0,0,32,51,1,16,0x30,0,4,0xf7});},"four parts");
+ for(unsigned value=1;value<128;++value){if(value==1||value==3)continue;auto mode=snowMode;mode[9]=value;rejects([&]{validateMidi(mode,true);},"Blocked");}
  rejects([]{parseProfile("VTR-PROFILE-1 snow5\n");},"Invalid");
  rejects([]{parseProfile("VTR-PROFILE-1 snow4\nextra");},"Invalid");
  char temporary[]="/tmp/vtr-four-part-XXXXXX";assert(mkdtemp(temporary));const fs::path directory=temporary;
  struct Cleanup {fs::path p;~Cleanup(){fs::remove_all(p);}} cleanup{directory};
+ {DeviceLease first,second;first.acquire((directory/"lease").string());rejects([&]{second.acquire((directory/"lease").string());},"owned");assert(!second.held());first.close();second.acquire((directory/"lease").string());}
+ {auto now=std::chrono::steady_clock::time_point{};unsigned requests=0,drains=0;
+  auto result=virus::hardware::readDump([&]{++requests;},[&]{return requests==2?PatchBytes{1}:PatchBytes{};},[&](unsigned ms){now+=std::chrono::milliseconds(ms);if(ms==1500)++drains;},[&]{return now;});assert(requests==2&&drains==1&&result==PatchBytes{1});}
  for(auto model:{DeviceModel::snow4,DeviceModel::ti16}){
   const auto root=directory/(model==DeviceModel::snow4?"snow":"ti");fs::create_directory(root);
   auto original=snapshot(model);Device device{original};std::map<std::string,PatchBytes> files;
@@ -101,6 +116,23 @@ int main(){
    // Old eighteen-buffer recovery directories have no profile sidecar.
    fs::remove(root/"before-device-profile.txt");assert(RestoreSnapshot::read(root).model==DeviceModel::ti16);
   }
+ }
+ // Authorized snapshots require current-format data and two identical reads.
+ {auto original=snapshot(DeviceModel::snow4);Device d(original);const auto root=directory/"authorized";fs::create_directory(root);unsigned published=0;
+  auto captured=captureSnapshot(d,DeviceModel::snow4,[&](auto name,const auto& bytes){++published;file(root/name,bytes);},[]{},true);
+  assert(captured.snowTestConsent&&d.requested.size()==10&&published==8&&d.wire.empty());
+  auto read=RestoreSnapshot::read(root);assert(read.snowTestConsent);
+  auto legacy=original;legacy.project.parts[2]=sound(2);legacy.project.parts[2][9]=8;auto& b=legacy.project.parts[2];unsigned sum=0;for(size_t i=5;i<265;++i)sum+=b[i];b[265]=sum&127;sum=0;for(size_t i=5;i<522;++i)sum+=b[i];b[522]=sum&127;
+  Device old(legacy);published=0;rejects([&]{captureSnapshot(old,DeviceModel::snow4,[&](auto,auto){++published;},[]{},true);},"Legacy Snow part");assert(published==0&&old.wire.empty());
+  rejects([&]{normalizeSnowPlaybackProject(legacy.project);},"Legacy Snow project");
+  auto stereo=original.project;for(unsigned p=0;p<4;++p)stereo.multi[185+p]=p%2?13:10;multiChecksum(stereo.multi);normalizeSnowPlaybackProject(stereo);
+  stereo.multi[185]=16;multiChecksum(stereo.multi);rejects([&]{normalizeSnowPlaybackProject(stereo);},"USB1/2");
+#ifdef RESTORE_HELPER
+  int lease=open((root/"lock").c_str(),O_CREAT|O_RDWR|O_CLOEXEC,0600);assert(lease>=0&&flock(lease,LOCK_EX|LOCK_NB)==0);
+  if(snowPlaybackTestBuild){RestorationGuard guard;guard.arm(RESTORE_HELPER,root,1,lease);guard.complete();}
+  else rejects([&]{RestorationGuard guard;guard.arm(RESTORE_HELPER,root,1,lease);},"did not validate");
+  assert(!fs::exists(root/"restoration-helper"));close(lease);
+#endif
  }
  auto m=snapshot(DeviceModel::snow4).project.multi;auto normalized=m;normalized[10]^=1;multiChecksum(normalized);
  assert(sameMulti(normalized,m,DeviceModel::ti16));assert(!sameMulti(normalized,m,DeviceModel::snow4));

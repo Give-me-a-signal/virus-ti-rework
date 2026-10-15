@@ -48,7 +48,7 @@ public:
  uint64_t registryID=0;
  unsigned interfaceNumber=0,inAddress=0,outAddress=0,inType=0,outType=0;
  std::vector<uint8_t> configuration;
- PrivateUSB(){
+ explicit PrivateUSB(bool requireSnowIdentity=false){
   io_iterator_t iterator=0;auto match=IOServiceMatching("IOUSBHostInterface");
   if(IOServiceGetMatchingServices(kIOMainPortDefault,match,&iterator)!=KERN_SUCCESS)throw std::runtime_error("USB interface enumeration failed");
   struct Candidate{io_service_t service;int number;int location;int product;};std::vector<Candidate> candidates;
@@ -65,6 +65,10 @@ public:
   // Legacy CreateHiddenPortInterface explicitly skips the first matching
   // vendor interface and uses the second. Do not claim the public MIDI port.
   auto selected=candidates[1];interfaceNumber=selected.number;IORegistryEntryGetRegistryEntryID(selected.service,&registryID);
+  if(requireSnowIdentity){
+   id product=CFBridgingRelease(IORegistryEntrySearchCFProperty(selected.service,kIOServicePlane,CFSTR("USB Product Name"),kCFAllocatorDefault,kIORegistryIterateRecursively|kIORegistryIterateParents));
+   if(![product isKindOfClass:NSString.class]||virus::identity::family([product UTF8String])!=virus::identity::Family::snow){for(auto c:candidates)IOObjectRelease(c.service);throw std::runtime_error("Snow USB product identity missing or mismatched; no RAM commands sent");}
+  }
   NSError* error=nil;
   interface_=[[IOUSBHostInterface alloc]initWithIOService:selected.service options:IOUSBHostObjectInitOptionsNone queue:nil error:&error interestHandler:nil];
   for(auto c:candidates)IOObjectRelease(c.service);

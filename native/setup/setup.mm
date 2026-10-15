@@ -1,5 +1,6 @@
 #import <Cocoa/Cocoa.h>
 #include "install.h"
+#include "../vst3/device_profile.h"
 #include <string>
 #include "../editor/appearance_import.h"
 @interface VTRSetup : NSObject <NSApplicationDelegate>
@@ -10,7 +11,7 @@
 @end
 @implementation VTRSetup
 - (void)applicationDidFinishLaunching:(NSNotification*)notification {
- _window=[[NSWindow alloc]initWithContentRect:NSMakeRect(0,0,580,360) styleMask:NSWindowStyleMaskTitled|NSWindowStyleMaskClosable backing:NSBackingStoreBuffered defer:NO];_window.title=@"Virus TI Rework Setup — 0.2.0 beta 1";[_window center];
+ _window=[[NSWindow alloc]initWithContentRect:NSMakeRect(0,0,580,360) styleMask:NSWindowStyleMaskTitled|NSWindowStyleMaskClosable backing:NSBackingStoreBuffered defer:NO];_window.title=VirusRework::snowPlaybackTestBuild?@"Virus TI Rework — Snow playback test 1 (unverified)":@"Virus TI Rework Setup — 0.2.0 beta 1";[_window center];
  NSTextField* intro=[NSTextField wrappingLabelWithString:@"Install the native Apple Silicon plug-ins for your user account. Quit your DAW before installing or updating. No Access installer is required for Dark or Polar. This beta is not Developer ID signed or notarized."];intro.frame=NSMakeRect(28,224,524,103);[_window.contentView addSubview:intro];
  _vst=[NSButton checkboxWithTitle:@"VST3 — Bitwig, Ableton Live and other VST3 hosts" target:nil action:nil];_vst.frame=NSMakeRect(28,185,520,25);_vst.state=NSControlStateValueOn;[_window.contentView addSubview:_vst];
  _au=[NSButton checkboxWithTitle:@"Audio Unit — AUv2 hosts" target:nil action:nil];_au.frame=NSMakeRect(28,150,520,25);_au.state=NSControlStateValueOn;[_window.contentView addSubview:_au];

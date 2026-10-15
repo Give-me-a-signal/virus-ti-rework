@@ -7,6 +7,7 @@
 #include "browser_bank.hpp"
 #include "device_session.h"
 #include "restoration_guard.h"
+#include "device_lease.h"
 #include "restoration.h"
 #include "project_recall.h"
 #include <dlfcn.h>
@@ -33,14 +34,14 @@ NSString* resources(){auto root=[[NSBundle bundleForClass:VTRHardwareBundleMarke
 class HardwareMidi final:public DeviceSession{
  Midi midi;
 public:
- HardwareMidi(){midi.usePrivate();}
+ explicit HardwareMidi(bool snow=false):midi(snow){midi.usePrivate(snow);}
  void send(const PatchBytes& p)override{midi.send(p);}
  PatchBytes single(uint8_t part,const std::function<void()>& idle)override{return midi.single(part,idle);}
  PatchBytes multi()override{return midi.multi();}
  void saveTraffic(const std::string& path)override{midi.savePrivate(@(path.c_str()));}
  uint64_t registryID()const{return midi.registryID();}
 };
-AudioDeviceID findDevice(DeviceModel& model){
+AudioDeviceID findDevice(DeviceModel& model,bool consent){
  AudioObjectPropertyAddress a{kAudioHardwarePropertyDevices,kAudioObjectPropertyScopeGlobal,kAudioObjectPropertyElementMain};UInt32 size=0;
  check(AudioObjectGetPropertyDataSize(kAudioObjectSystemObject,&a,0,nullptr,&size),"Enumerate audio");
  std::vector<AudioDeviceID> devices(size/sizeof(AudioDeviceID));check(AudioObjectGetPropertyData(kAudioObjectSystemObject,&a,0,nullptr,&size,devices.data()),"Read audio devices");
@@ -51,9 +52,10 @@ AudioDeviceID findDevice(DeviceModel& model){
   auto model=virus::identity::family(label?label:"");if(name)CFRelease(name);
   candidates.push_back({d,model});}
  // Reject Snow/ambiguity before opening MIDI, capture callbacks or device I/O.
- const AudioDeviceID found=virus::identity::selectAudioDevice(candidates);
+ const AudioDeviceID found=virus::identity::selectAudioDevice(candidates,snowPlaybackTestBuild&&consent);
  for(auto candidate:candidates)if(candidate.id==found)model=candidate.model==virus::identity::Family::snow?DeviceModel::snow4:DeviceModel::ti16;
- requireVerifiedProfile(model); // Independent guard also used by helper recovery.
+ requireVerifiedProfile(model,consent);
+ if(consent&&model!=DeviceModel::snow4)throw std::runtime_error("Snow test requires a Snow device"); // Independent guard also used by helper recovery.
  a={kAudioDevicePropertyStreams,kAudioDevicePropertyScopeInput,kAudioObjectPropertyElementMain};size=0;check(AudioObjectGetPropertyDataSize(found,&a,0,nullptr,&size),"Capture streams");
  if(size!=sizeof(AudioStreamID))throw std::runtime_error("Expected one TI capture stream");AudioStreamID stream=0;check(AudioObjectGetPropertyData(found,&a,0,nullptr,&size,&stream),"Capture stream");
  a={kAudioStreamPropertyVirtualFormat,kAudioObjectPropertyScopeGlobal,kAudioObjectPropertyElementMain};AudioStreamBasicDescription f{};size=sizeof(f);check(AudioObjectGetPropertyData(stream,&a,0,nullptr,&size,&f),"Capture format");
@@ -102,7 +104,8 @@ struct HardwareService::Impl {
  int mutedPart=-1;
  AudioDeviceID device=0;
  AudioDeviceIOProcID proc=nullptr;
- int deviceLock=-1;
+ DeviceLease deviceLease;
+ std::atomic<bool> snowSessionConsent{false};
  PatchBytes single,multi,pendingPreset;
  ProjectPatches original,loaded,staged;
  bool lastSucceeded=true;
@@ -122,11 +125,11 @@ struct HardwareService::Impl {
  }
  ~Impl(){control.reset();stop=true;if(worker.joinable())worker.join();}
  uint64_t enqueue(int op, const std::vector<uint8_t>& patch={},unsigned target=0){
-  if(op<1||op>9||target>=activeParts())return 0;
+  if(op<1||op>10||(op==10&&!snowPlaybackTestBuild)||target>=activeParts())return 0;
   std::lock_guard<std::mutex> guard(commandLock);
   if(stop)return 0;
   if(busy.exchange(true))return 0;
-  pendingPreset=patch;pendingPart=target;if(op==1)reconnectIntent=true;if(op==8)recallPending=false;if(op==2){reconnectIntent=false;recallPending=false;}auto id=++submitted;requested=op;
+  pendingPreset=patch;pendingPart=target;if(op==1)reconnectIntent=true;if(op==10)reconnectIntent=false;if(op==8)recallPending=false;if(op==2){reconnectIntent=false;recallPending=false;}auto id=++submitted;requested=op;
   try{if(!worker.joinable())worker=std::thread([this]{run();});}
   catch(...){requested=0;completed=id;busy=false;throw;}
   return id;
@@ -159,7 +162,7 @@ struct HardwareService::Impl {
     id object=[NSJSONSerialization JSONObjectWithData:[command dataUsingEncoding:NSUTF8StringEncoding] options:0 error:nil];
     if(![object isKindOfClass:NSDictionary.class]||![object[@"command"]isKindOfClass:NSString.class])throw std::runtime_error("Invalid JSON command");args=object;command=args[@"command"];
    }
-   int op=[command isEqual:@"connect"]?1:[command isEqual:@"disconnect"]?2:[command isEqual:@"test-tone"]?3:0;
+   int op=[command isEqual:@"connect-snow-test"]&&snowPlaybackTestBuild?10:[command isEqual:@"connect"]?1:[command isEqual:@"disconnect"]?2:[command isEqual:@"test-tone"]?3:0;
    unsigned target=args[@"part"]?unsigned(index(args,@"part",17)):1;if(target==0||target>activeParts())throw std::runtime_error("Part outside connected device profile");--target;
    std::vector<uint8_t> patch;
    if([command isEqual:@"banks"]||[command isEqual:@"presets"]||[command isEqual:@"load"]){
@@ -204,7 +207,7 @@ struct HardwareService::Impl {
    }else if(!op&&![command isEqual:@"status"])throw std::runtime_error("Unknown command; allowed: status, connect, disconnect, test-tone, banks, presets, load, load-file, state-save, state-load, cutoff, emulator, parts, note-on, note-off, route");
    if(op){
     if(op!=2&&!hostProcessing.load())throw std::runtime_error("DAW processor is inactive; enable realtime processing first");
-    if(op>=3&&!live.load())throw std::runtime_error("Connect before loading a RAM patch");
+    if(op>=3&&op!=10&&!live.load())throw std::runtime_error("Connect before loading a RAM patch");
     auto id=enqueue(op,patch,target);if(!id)throw std::runtime_error("A hardware command is already pending");result[@"request_id"]=@(id);
    }
   }catch(const std::exception& e){result[@"ok"]=@NO;result[@"error"]=@(e.what());}
@@ -213,11 +216,11 @@ struct HardwareService::Impl {
   result[@"state_recall_pending"]=@(recallPending.load());result[@"state_format"]=@3;result[@"backend"]=emulator?@"emulator":@"hardware";
   {std::lock_guard<std::mutex> g(stateLock);NSMutableArray* parts=[NSMutableArray array];for(unsigned p=0;p<16;++p){auto& bytes=staged.parts[p].empty()?loaded.parts[p]:staged.parts[p];[parts addObject:@{@"part":@(p+1),@"name":bytes.empty()?@"":@(virus::patches::parse_single(bytes).name.c_str()),@"bytes":@(bytes.size())}];}result[@"parts"]=parts;}
   result[@"host_processing"]=@(hostProcessing.load());result[@"host_sample_rate"]=@(rate.load());result[@"device_sample_rate"]=@48000;
-  result[@"firmware_operations_supported"]=@NO;result[@"stored_bank_writes_supported"]=@NO;result[@"active_part_count"]=@(activeParts());result[@"snow_hardware_verified"]=@NO;
+  result[@"firmware_operations_supported"]=@NO;result[@"stored_bank_writes_supported"]=@NO;result[@"active_part_count"]=@(activeParts());result[@"snow_hardware_verified"]=@NO;result[@"snow_test_build"]=@(snowPlaybackTestBuild);result[@"snow_test_consent"]=@(snowSessionConsent.load());
   result[@"lifetime_counters"]=@{@"capture_callbacks":@(callbacks.load()),@"capture_errors":@(invalidCapture.load()),@"fifo_overruns":@(capture.overruns.load()),@"fifo_underruns":@(capture.underruns.load()),@"rendered_frames":@(capture.rendered.load()),@"midi_sent":@(notesSent.load())};
   NSMutableArray* raw=[NSMutableArray array];NSMutableArray* rendered=[NSMutableArray array];
   for(unsigned c=0;c<6;c++){[raw addObject:@(rawPeak[c].load())];[rendered addObject:@(renderedPeak[c].load())];}
-  NSMutableArray* meterValues=[NSMutableArray array];for(float level:usbMeters.read(live.load()&&outputReady.load()))[meterValues addObject:@(level)];result[@"usb_peak_meters"]=meterValues;result[@"part_meter_source"]=@"midi-note-on-velocity";NSMutableArray* activity=[NSMutableArray array];for(float level:midiActivity.read(live.load()))[activity addObject:@(level)];result[@"part_midi_activity"]=activity;
+  NSMutableArray* meterValues=[NSMutableArray array];auto peaks=usbMeters.read(live.load()&&outputReady.load());if(activeParts()==4)peaks[2]=0;for(float level:peaks)[meterValues addObject:@(level)];result[@"usb_peak_meters"]=meterValues;result[@"part_meter_source"]=@"midi-note-on-velocity";NSMutableArray* activity=[NSMutableArray array];for(float level:midiActivity.read(live.load()))[activity addObject:@(level)];result[@"part_midi_activity"]=activity;
   result[@"lifetime_raw_channel_peaks"]=raw;result[@"lifetime_plugin_channel_peaks"]=rendered;
   NSData* json=[NSJSONSerialization dataWithJSONObject:result options:0 error:nil];return std::string(static_cast<const char*>(json.bytes),json.length);
  }
@@ -235,12 +238,13 @@ struct HardwareService::Impl {
  void save(NSString* name,const std::vector<uint8_t>& bytes){if(![[NSData dataWithBytes:bytes.data() length:bytes.size()]writeToFile:[directory stringByAppendingPathComponent:name] atomically:YES])throw std::runtime_error("Cannot save hardware snapshot");}
  void pause(unsigned milliseconds){auto end=std::chrono::steady_clock::now()+std::chrono::milliseconds(milliseconds);do{if(live)drainMidi();std::this_thread::sleep_for(std::chrono::milliseconds(2));}while(std::chrono::steady_clock::now()<end);}
  static void emulatorAudio(void* context,const float* samples,unsigned frames){auto& self=*static_cast<Impl*>(context);if(!self.live)return;++self.callbacks;self.usbMeters.push(samples,frames);self.capture.push(samples,frames);for(unsigned c=0;c<6;++c){float peak=self.rawPeak[c];for(unsigned f=0;f<frames;++f)peak=std::max(peak,std::abs(samples[f*6+c]));self.rawPeak[c]=peak;}}
- void connect(){
+ void connect(bool snowConsent=false){
+  snowSessionConsent=snowConsent;
   outputReady=false;performanceSuppressed=true;
   status(emulator?"Booting OsTIrus TI emulator…":"Connecting TI · preserving original edit buffers…");
   NSString* base=[NSHomeDirectory() stringByAppendingPathComponent:@"Library/Application Support/VirusTIRework"];
   NSError* error=nil;if(![[NSFileManager defaultManager]createDirectoryAtPath:base withIntermediateDirectories:YES attributes:nil error:&error])throw std::runtime_error("Cannot create snapshot directory");
-  if(!emulator){auto path=[base stringByAppendingPathComponent:@"hardware.lock"];deviceLock=open(path.fileSystemRepresentation,O_CREAT|O_RDWR|O_CLOEXEC,0600);if(deviceLock<0||flock(deviceLock,LOCK_EX|LOCK_NB)!=0)throw std::runtime_error("TI owned by another plug-in or its restoration helper; wait for restoration to finish");}
+  if(!emulator){auto path=[base stringByAppendingPathComponent:@"hardware.lock"];deviceLease.acquire(path.fileSystemRepresentation);}
   directory=[base stringByAppendingPathComponent:NSUUID.UUID.UUIDString];{std::lock_guard<std::mutex> g(stateLock);snapshotDirectory=directory.fileSystemRepresentation;}
   if(![[NSFileManager defaultManager]createDirectoryAtPath:directory withIntermediateDirectories:NO attributes:nil error:&error])throw std::runtime_error("Cannot create session snapshot directory");
   log.open([[directory stringByAppendingPathComponent:@"session.log"]fileSystemRepresentation]);
@@ -249,12 +253,12 @@ struct HardwareService::Impl {
    emulatorLibrary=dlopen(path.fileSystemRepresentation,RTLD_NOW|RTLD_LOCAL);if(!emulatorLibrary)throw std::runtime_error(std::string("Emulator runtime unavailable: ")+dlerror());
    auto create=reinterpret_cast<CreateEmulator>(dlsym(emulatorLibrary,"vtrCreateEmulator"));if(!create)throw std::runtime_error("Emulator runtime entrypoint absent");
    char error[1024]{};midi.reset(create(emulatorROM.c_str(),emulatorAudio,this,error,sizeof(error)));if(!midi)throw std::runtime_error(error);
-  }else{device=findDevice(model);midi=std::make_unique<HardwareMidi>();}
+  }else{device=findDevice(model,snowConsent);supportedParts=partCount(model);midi=std::make_unique<HardwareMidi>(model==DeviceModel::snow4);}
   supportedParts=partCount(model);
-  {std::lock_guard<std::mutex> g(stateLock);normalizeProject(staged,model);} // Reject cross-model projects before device commands.
-  auto before=captureSnapshot(*midi,model,[&](std::string name,const auto& bytes){save(@(name.c_str()),bytes);},[&]{if(stop)throw std::runtime_error("Shutdown during snapshot");});
+  {std::lock_guard<std::mutex> g(stateLock);if(model==DeviceModel::snow4)normalizeSnowPlaybackProject(staged);else normalizeProject(staged,model);} // Reject cross-model projects before device commands.
+  auto before=captureSnapshot(*midi,model,[&](std::string name,const auto& bytes){save(@(name.c_str()),bytes);},[&]{if(stop)throw std::runtime_error("Shutdown during snapshot");},snowConsent);
   original=before.project;single=before.single;multi=before.project.multi;
-  if(!emulator){auto helper=[resources() stringByAppendingPathComponent:@"Helpers/virus-ti-restoration-helper"];restoration.arm(helper.fileSystemRepresentation,directory.fileSystemRepresentation,static_cast<HardwareMidi*>(midi.get())->registryID(),deviceLock);}
+  if(!emulator){auto helper=[resources() stringByAppendingPathComponent:@"Helpers/virus-ti-restoration-helper"];restoration.arm(helper.fileSystemRepresentation,directory.fileSystemRepresentation,static_cast<HardwareMidi*>(midi.get())->registryID(),deviceLease.descriptor());}
   if(stop)throw std::runtime_error("Shutdown before connection changes");
   if(!emulator){
    check(AudioDeviceCreateIOProcID(device,audio,this,&proc),"Create TI capture callback");
@@ -263,11 +267,11 @@ struct HardwareService::Impl {
    check(AudioObjectSetPropertyData(device,&property,0,nullptr,sizeof(usage),&usage),"Set capture-only stream usage");
   }
   capture.setTarget(emulator?8192:2048);
-  dirty=true;sendMidi({0xf0,0,0x20,0x33,1,16,0x73,0,122,3,0xf7});pause(350);
+  dirty=true;sendMidi({0xf0,0,0x20,0x33,1,16,0x73,0,122,uint8_t(model==DeviceModel::snow4?1:3),0xf7});pause(350);
   // Original Global USB / Virus Control USB IO Configuration: 1 = three
   // synth returns, no input. CoreAudio's first pair otherwise carries input.
   // This is a host-selected configuration, not part of a sound snapshot.
-  if(!emulator){sendMidi({0xf0,0,0x20,0x33,1,16,0x73,0,9,1,0xf7});pause(100);}
+  if(!emulator&&model==DeviceModel::ti16){sendMidi({0xf0,0,0x20,0x33,1,16,0x73,0,9,1,0xf7});pause(100);}
   ProjectPatches desired;{std::lock_guard<std::mutex> g(stateLock);desired=staged;}
   auto routing=desired.multi.empty()?multi:desired.multi;
   if(desired.multi.empty())for(unsigned p=0;p<activeParts();++p){routing[73+p]=p;routing[89+p]=0;routing[105+p]=127;routing[153+p]=127;routing[169+p]=127;routing[185+p]=10;routing[249+p]|=1;}
@@ -334,28 +338,29 @@ struct HardwareService::Impl {
    if(midi&&directory)attempt([&]{midi->saveTraffic(directory.fileSystemRepresentation);});midi.reset();dirty=false;
    // The helper retains the shared lease. Closing our descriptor must NOT
    // explicitly unlock it; no new owner may enter before readback completes.
-   if(deviceLock>=0){close(deviceLock);deviceLock=-1;}
+   deviceLease.close();
    restoration.handoff();usbMeters.clear();midiActivity.clear();status("Host closing · automatic RAM restoration in progress");log.close();return;
   }
   if(midi&&dirty){
-   RestoreSnapshot recovery;recovery.model=model;recovery.project=original;recovery.single=single;
-   attempt([&]{restoreSnapshot(*midi,recovery,[&](std::string name,const auto& bytes){save(@(name.c_str()),bytes);},[&](auto ms){pause(ms);},!emulator);});
+   RestoreSnapshot recovery;recovery.model=model;recovery.snowTestConsent=snowSessionConsent;recovery.project=original;recovery.single=single;
+   attempt([&]{restoreSnapshot(*midi,recovery,[&](std::string name,const auto& bytes){save(@(name.c_str()),bytes);},[&](auto ms){pause(ms);},!emulator&&model==DeviceModel::ti16);});
   }
   usbMeters.clear();midiActivity.clear();
   performanceSuppressed=false;dirty=false;if(midi&&directory)attempt([&]{midi->saveTraffic(directory.fileSystemRepresentation);});midi.reset();if(emulatorLibrary){dlclose(emulatorLibrary);emulatorLibrary=nullptr;}
   if(restoration.armed()){if(errors.empty())attempt([&]{restoration.complete();});else restoration.handoff();}
-  if(deviceLock>=0){close(deviceLock);deviceLock=-1;}
+  deviceLease.close();
   status(errors.empty()?(hadHardwareState?("Disconnected · All "+std::to_string(activeParts())+" parts restored · Single mode sent"):"Disconnected · No device state changed"):"Disconnected · Restore needs attention: "+errors);log.close();
  }
  void run(){@autoreleasepool{
   while(!stop){@autoreleasepool{int op=requested.exchange(0);
    if(!op&&recallPending&&hostProcessing){std::lock_guard<std::mutex> g(commandLock);if(!busy.exchange(true)){op=7;++submitted;recallPending=false;}}
    try{
-   if(op==1&&!live)connect();else if(op==2||op==8)disconnect(stop.load());else if(op==3)testTone(pendingPart);else if(op==4)load(pendingPreset,pendingPart);
+   if((op==1||op==10)&&!live)connect(op==10);else if(op==2||op==8)disconnect(stop.load());else if(op==3)testTone(pendingPart);else if(op==4)load(pendingPreset,pendingPart);
    else if(op==5)snapshot();else if(op==6){sendMidi(pendingPreset);++notesSent;}
    else if(op==9)route(pendingPart,pendingPreset.at(0));
    else if(op==7){if(!live)connect();else{
     ProjectPatches desired;{std::lock_guard<std::mutex> g(stateLock);desired=staged;}
+    if(model==DeviceModel::snow4)desired=normalizeSnowPlaybackProject(desired);
     performanceSuppressed=true;outputReady=false;
     auto recalled=recallProject(*midi,desired,model,[&](auto ms){pause(ms);},[&](const auto& bytes,unsigned part){load(bytes,part);std::lock_guard<std::mutex> g(stateLock);return loaded.parts[part];});
     replayVolumes();drainMidi();performanceSuppressed=false;outputReady=true;
@@ -363,7 +368,7 @@ struct HardwareService::Impl {
    }}
 
    if(op){std::lock_guard<std::mutex> g(stateLock);lastSucceeded=text.find("needs attention")==std::string::npos;}
-   if(op==1||op==2||op==3||op==4||op==9||(op==6&&!pendingPreset.empty()&&(pendingPreset[0]&0xf0)==0xb0))++stateRevision;
+   if(op==1||op==10||op==2||op==3||op==4||op==9||(op==6&&!pendingPreset.empty()&&(pendingPreset[0]&0xf0)==0xb0))++stateRevision;
    if(op==7&&apiRecallDirty.exchange(false))++stateRevision;
    if(live)drainMidi();
   }catch(const std::exception& e){std::string cause=e.what();if(op!=5)disconnect(stop.load());std::string restored;{std::lock_guard<std::mutex> g(stateLock);restored=text;}status(std::string(op==5?"Project save failed: ":"Connection failed: ")+cause+" · "+restored);{std::lock_guard<std::mutex> g(stateLock);lastSucceeded=false;}}
@@ -393,11 +398,11 @@ bool HardwareService::captureProject(ProjectPatches& patch,bool& reconnect){
   std::lock_guard<std::mutex> g(impl->stateLock);if(!impl->lastSucceeded)return false;
  }
  std::lock_guard<std::mutex> g(impl->stateLock);if(impl->snapshotFailed&&impl->staged.empty())return false;
- patch=impl->loaded;for(unsigned p=0;p<16;++p)if(!impl->staged.parts[p].empty())patch.parts[p]=impl->staged.parts[p];if(!impl->staged.multi.empty())patch.multi=impl->staged.multi;reconnect=impl->reconnectIntent;return true;
+ patch=impl->loaded;for(unsigned p=0;p<16;++p)if(!impl->staged.parts[p].empty())patch.parts[p]=impl->staged.parts[p];if(!impl->staged.multi.empty())patch.multi=impl->staged.multi;reconnect=impl->reconnectIntent&&impl->activeParts()!=4;return true;
 }
 bool HardwareService::restoreProject(const ProjectPatches& patch,bool reconnect,const std::array<uint8_t,16>* volumes){
  try{
-  auto ram=normalizeProject(patch,impl->live&&impl->activeParts()==4?DeviceModel::snow4:DeviceModel::ti16);
+  auto ram=impl->live&&impl->activeParts()==4?normalizeSnowPlaybackProject(patch):normalizeProject(patch);
   std::lock_guard<std::mutex> snapshotGuard(impl->snapshotLock);
   std::lock_guard<std::mutex> commandGuard(impl->commandLock);if(impl->busy||impl->stop)return false;
   if(volumes)for(unsigned p=0;p<16;++p)impl->partVolumes[p]=(*volumes)[p];
@@ -409,7 +414,7 @@ bool HardwareService::restoreProject(const ProjectPatches& patch,bool reconnect,
  }catch(...){return false;}
 }
 std::string HardwareService::controlEndpoint()const{return impl->control?impl->control->path():std::string{};}
-MeterSnapshot HardwareService::meters()const noexcept{MeterSnapshot result;result.usbPeak=impl->usbMeters.read(impl->live.load()&&impl->outputReady.load());result.midiActivity=impl->midiActivity.read(impl->live.load());return result;}
+MeterSnapshot HardwareService::meters()const noexcept{MeterSnapshot result;result.usbPeak=impl->usbMeters.read(impl->live.load()&&impl->outputReady.load());if(impl->activeParts()==4)result.usbPeak[2]=0;result.midiActivity=impl->midiActivity.read(impl->live.load());return result;}
 std::string HardwareService::status()const{std::lock_guard<std::mutex> g(impl->stateLock);return impl->text;}
 void HardwareService::setup(double rate){impl->rate=rate;impl->capture.setup(rate);}
 void HardwareService::beginBlock(bool active)noexcept{
@@ -421,6 +426,7 @@ void HardwareService::beginBlock(bool active)noexcept{
 }
 bool HardwareService::render(std::array<int32_t,6>& value)noexcept{
  if(!impl->consumerLive||!impl->capture.pop(value))return false;
+ if(impl->activeParts()==4){value[4]=0;value[5]=0;}
  for(unsigned c=0;c<6;c++){float peak=float(std::abs(double(value[c])/2147483648.));if(peak>impl->renderedPeak[c].load(std::memory_order_relaxed))impl->renderedPeak[c].store(peak,std::memory_order_relaxed);}
  return true;
 }
@@ -428,4 +434,6 @@ void HardwareService::hostProcessing(bool active)noexcept{impl->hostProcessing.s
 bool HardwareService::connected()const noexcept{return impl->live.load(std::memory_order_acquire);}
 uint64_t HardwareService::stateRevision()const noexcept{return impl->stateRevision.load();}
 unsigned HardwareService::latency()const noexcept{return impl->capture.latency(impl->rate.load());}
+unsigned HardwareService::activePartCount()const noexcept{return impl->activeParts();}
+
 }

@@ -4,6 +4,16 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_OSX_ARCHITECTURES arm64 CACHE STRING "Native Apple silicon")
 set(CMAKE_OSX_DEPLOYMENT_TARGET 12.0 CACHE STRING "macOS minimum")
 project(VirusTIRework VERSION 0.2.0 LANGUAGES C CXX OBJCXX)
+option(VTR_SNOW_PLAYBACK_TEST_BUILD "Build explicitly opted-in, unverified Snow playback preview" OFF)
+set(VTR_BUILD_NUMBER 2001)
+set(VTR_AU_VERSION 8193)
+if(VTR_SNOW_PLAYBACK_TEST_BUILD)
+ add_compile_definitions(VTR_SNOW_PLAYBACK_TEST_BUILD=1)
+ set(VTR_BUILD_NUMBER 2002)
+ set(VTR_AU_VERSION 8194)
+endif()
+configure_file(au-Info.plist "${CMAKE_CURRENT_BINARY_DIR}/au-Info.plist" @ONLY)
+configure_file(../setup/Info.plist "${CMAKE_CURRENT_BINARY_DIR}/setup-Info.plist" @ONLY)
 get_filename_component(VTR_SOURCE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../.." ABSOLUTE)
 add_compile_options("-ffile-prefix-map=${VTR_SOURCE_ROOT}=." "-fdebug-prefix-map=${VTR_SOURCE_ROOT}=.")
 option(VTR_SANITIZE "Build offline tests with sanitizers" OFF)
@@ -44,7 +54,7 @@ add_test(NAME device_profile_tests COMMAND device_profile_tests)
 set_target_properties(VirusTIRework PROPERTIES
  MACOSX_BUNDLE_GUI_IDENTIFIER "org.virus-ti-rework.development.vst3"
  MACOSX_BUNDLE_BUNDLE_NAME "Virus TI Rework"
- MACOSX_BUNDLE_BUNDLE_VERSION "2001"
+ MACOSX_BUNDLE_BUNDLE_VERSION "${VTR_BUILD_NUMBER}"
  MACOSX_BUNDLE_SHORT_VERSION_STRING "0.2.0")
 
 set_source_files_properties(../editor/editor.mm PROPERTIES COMPILE_FLAGS "-fobjc-arc")
@@ -134,7 +144,7 @@ add_library(VirusTIReworkAU MODULE "${AU_WRAPPER}/auwrapper.mm" "${AU_WRAPPER}/a
 target_compile_definitions(VirusTIReworkAU PRIVATE SMTG_AUWRAPPER_USES_AUSDK CA_USE_AUDIO_PLUGIN_ONLY=0 SMTG_AUCocoaUIBase_CLASS_NAME=VTRBetaAUCocoaView)
 target_include_directories(VirusTIReworkAU PRIVATE "${SDK_ROOT}")
 target_link_libraries(VirusTIReworkAU PRIVATE vtr_ausdk sdk_hosting "-framework AudioUnit" "-framework AudioToolbox" "-framework CoreMIDI" "-framework CoreAudio" "-framework Cocoa" "-framework Carbon")
-set_target_properties(VirusTIReworkAU PROPERTIES CXX_STANDARD 23 BUNDLE TRUE BUNDLE_EXTENSION component OUTPUT_NAME "Virus TI Rework" MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/au-Info.plist" LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/AU")
+set_target_properties(VirusTIReworkAU PROPERTIES CXX_STANDARD 23 BUNDLE TRUE BUNDLE_EXTENSION component OUTPUT_NAME "Virus TI Rework" MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_BINARY_DIR}/au-Info.plist" LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/AU")
 add_dependencies(VirusTIReworkAU VirusTIRework)
 add_custom_target(vtr_au_payload ALL
  DEPENDS VirusTIReworkAU VirusTIRework
@@ -147,7 +157,7 @@ add_test(NAME au_host_tests COMMAND au_host_tests "$<TARGET_BUNDLE_DIR:VirusTIRe
 add_executable(VirusTIReworkSetup MACOSX_BUNDLE ../setup/setup.mm ../setup/install.mm ../editor/appearance_import.mm)
 set_source_files_properties(../setup/setup.mm ../setup/install.mm PROPERTIES COMPILE_FLAGS "-fobjc-arc")
 target_link_libraries(VirusTIReworkSetup PRIVATE "-framework Cocoa")
-set_target_properties(VirusTIReworkSetup PROPERTIES OUTPUT_NAME "Virus TI Rework Setup" MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/../setup/Info.plist")
+set_target_properties(VirusTIReworkSetup PROPERTIES OUTPUT_NAME "Virus TI Rework Setup" MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_BINARY_DIR}/setup-Info.plist")
 
 foreach(t vst3_processor_tests vst3_editor_tests au_host_tests)
  target_compile_options(${t} PRIVATE -UNDEBUG)

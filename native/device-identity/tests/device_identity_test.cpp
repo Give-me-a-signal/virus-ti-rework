@@ -27,6 +27,8 @@ int main(){
  rejects([]{selectAudioDevice({{42,family("Virus TI Snow")}});},"Snow detected");
  rejects([]{selectAudioDevice({{42,Family::snow}});},"unverified");
  rejects([]{selectAudioDevice({{42,Family::snow}});},"connection is disabled");
+ assert(selectAudioDevice({{42,Family::snow}},true)==42);
+ rejects([]{selectAudioDevice({{42,Family::snow},{43,Family::ti}},true);},"Multiple");
  rejects([]{selectAudioDevice({{1,Family::ti},{2,Family::snow}});},"Multiple");
  rejects([]{selectAudioDevice({{2,Family::snow},{1,Family::ti}});},"Multiple");
  rejects([]{selectAudioDevice({{1,Family::ti},{2,Family::ti}});},"Multiple");
