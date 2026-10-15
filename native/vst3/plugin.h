@@ -62,6 +62,7 @@ public:
  void hardwareCommand(int);
  void hardwarePreset(const std::vector<uint8_t>&,unsigned part=0);
  bool hardwareConnected=false;
+ unsigned hardwarePartCount=16;
  MeterSnapshot hardwareMeters;
  ProjectPatches hardwarePatches;
  std::vector<uint8_t> hardwarePatch;

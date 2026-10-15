@@ -127,7 +127,9 @@ NSString* bindingKey(NSString* name,NSInteger part) {return [NSString stringWith
  [refresh invalidate];refresh=nil;
  if(self.window){__weak VTRNativeEditor* weak=self;refresh=[NSTimer scheduledTimerWithTimeInterval:0.1 repeats:YES block:^(NSTimer*){VTRNativeEditor* strong=weak;if(strong){if(strong->originalUI&&![[NSFileManager defaultManager]fileExistsAtPath:[originalAppearanceDirectory() stringByAppendingPathComponent:@"editor.xml"]]){[strong->uiStyleButton selectItemWithTag:0];[strong changeUIStyle:strong->uiStyleButton];}strong->controller->hardwareCommand(0);[strong synchronizeHardwarePatch];[strong setNeedsDisplay:YES];}}];}
 }
-- (void)hardwareAction:(NSButton*)sender {controller->hardwareCommand(int(sender.tag));}
+- (void)hardwareAction:(NSButton*)sender {
+ controller->hardwareCommand(int(sender.tag));
+}
 - (void)dealloc { [refresh invalidate];if(dragID!=kNoParamId)controller->endEdit(dragID);for(NSNumber* identifier in graphEditIDs)controller->endEdit(identifier.unsignedIntValue); }
 - (NSInteger)partOf:(NSDictionary*)node {NSInteger part=[node[@"attrs"][@"Part"] integerValue];return part<0?selectedPart:part;}
 - (ParamID)paramID:(NSString*)name part:(NSInteger)part {
@@ -236,9 +238,11 @@ NSString* bindingKey(NSString* name,NSInteger part) {return [NSString stringWith
 }
 #include "modern_editor.inc"
 - (void)drawRect:(NSRect)dirty {
+ selectedPart=std::min(selectedPart,long(controller->hardwarePartCount-1));
  [self updateBrowserVisibility];
  if(originalUI){[[NSColor colorWithWhite:.15 alpha:1]setFill];NSRectFill(self.bounds);for(NSDictionary* node in nodes)[self drawNode:node];}
  else{[self drawModernPanels];for(NSDictionary* node in nodes)[self drawModernNode:node];}
+ if(controller->hardwarePartCount==4){Skin::Palette snow(originalUI||darkTheme);for(unsigned part=4;part<16;++part){NSRect row=NSMakeRect(10,51+part*26,177,24);[snow.base setFill];NSRectFill(row);Skin::text([NSString stringWithFormat:@"%02u  unavailable on Snow",part+1],NSInsetRect(row,5,4),8,snow.muted);}}
  if(originalUI)Skin::box(NSMakeRect(0,470,907,43),Skin::Palette(true).base,nil,0);
  if(focused&&[self visible:focused]){NSRect r=NSInsetRect(rectOf(focused[@"absolute_rect"]),-2,-2);auto ring=[NSBezierPath bezierPathWithRoundedRect:r xRadius:3 yRadius:3];[Skin::Palette(originalUI||darkTheme).accent setStroke];CGFloat dash[2]={2,2};[ring setLineDash:dash count:2 phase:0];ring.lineWidth=.8;[ring stroke];}
  Skin::Palette p(originalUI||darkTheme);Skin::line(NSMakePoint(10,483),NSMakePoint(897,483),p.line,.7);
@@ -246,7 +250,7 @@ NSString* bindingKey(NSString* name,NSInteger part) {return [NSString stringWith
  if([message hasPrefix:@"Disconnected"]&&![message containsString:@"attention"])message=@"Offline · Presets and editing available";
  Skin::text(message,NSMakeRect(258,488,281,18),9,p.muted);
  Skin::text(@"MIDI activity  /  CC7 volume",NSMakeRect(12,471,177,11),7,p.muted,YES);
- for(unsigned bus=0;bus<3;++bus){float level=controller->hardwareMeters.usbPeak[bus];CGFloat x=652+bus*79;NSString* db=level>1e-6?[NSString stringWithFormat:@"%.0f dBFS",20*log10(level)]:@"−∞ dBFS";Skin::text([NSString stringWithFormat:@"USB%u  %@",bus+1,db],NSMakeRect(x,469,74,10),6.5,p.muted,YES);Skin::box(NSMakeRect(x,480,74,2),p.line,nil,1);Skin::box(NSMakeRect(x,480,74*meterFraction(level),2),level>=1?NSColor.systemRedColor:p.accent,nil,1);}
+ for(unsigned bus=0;bus<3;++bus){float level=controller->hardwareMeters.usbPeak[bus];CGFloat x=652+bus*79;NSString* db=level>1e-6?[NSString stringWithFormat:@"%.0f dBFS",20*log10(level)]:@"−∞ dBFS";Skin::text(controller->hardwarePartCount==4&&bus==2?@"USB3 unavailable":[NSString stringWithFormat:@"USB%u  %@",bus+1,db],NSMakeRect(x,469,74,10),6.5,p.muted,YES);Skin::box(NSMakeRect(x,480,74,2),p.line,nil,1);Skin::box(NSMakeRect(x,480,74*meterFraction(level),2),level>=1?NSColor.systemRedColor:p.accent,nil,1);}
 
  if(hovered){NSString* name=hovered[@"attrs"][@"Parameter"];NSInteger part=[self partOf:hovered];
   BOOL mapped=[self paramID:name part:part]!=kNoParamId;NSString* suffix=[self editable:hovered]?(mapped?@"Shift: fine  ·  Double-click: reset":@"Local control · not stored in the sound"):@"Read-only";
@@ -258,6 +262,8 @@ NSString* bindingKey(NSString* name,NSInteger part) {return [NSString stringWith
  NSDictionary* a=node[@"attrs"];NSString* name=a[@"Parameter"];NSString* type=node[@"type"];
  if(!Graphs::supports(type)&&![type containsString:@"Knob"]&&![type containsString:@"Slider"]&&![type containsString:@"Menu"]&&![type containsString:@"Button"])return NO;
  if([type isEqual:@"PatchSaveMenu"])return NO;
+ if([self partOf:node]>=controller->hardwarePartCount)return NO;
+ if([name isEqual:@"Multi Parameters/Panel Part"]&&[a[@"OnValue"]integerValue]>=controller->hardwarePartCount)return NO;
  if([a[@"Enabled"] isEqual:@"false"])return NO;
  id ancestor=node[@"parent_id"];
  while(ancestor&&ancestor!=[NSNull null]){NSDictionary* parent=nodeByID[ancestor];if(!parent)break;if([parent[@"attrs"][@"Enabled"] isEqual:@"false"])return NO;ancestor=parent[@"parent_id"];}
@@ -287,7 +293,7 @@ NSString* bindingKey(NSString* name,NSInteger part) {return [NSString stringWith
 - (void)applyNode:(NSDictionary*)node plain:(double)value gesture:(BOOL)gesture {
  NSString* name=node[@"attrs"][@"Parameter"];
  if([name isEqual:@"VirusControl/SelectedPage"])selectedPage=static_cast<NSInteger>(value);
- else if([name isEqual:@"Multi Parameters/Panel Part"])selectedPart=std::clamp(static_cast<NSInteger>(value),0L,15L);
+ else if([name isEqual:@"Multi Parameters/Panel Part"])selectedPart=std::clamp(static_cast<NSInteger>(value),0L,long(controller->hardwarePartCount-1));
  else if([name isEqual:@"VirusControl/SelectedUtilityPage"])selectedUtility=static_cast<NSInteger>(value);
  else if([name isEqual:@"VirusControl/Selected Section"])selectedSection=static_cast<NSInteger>(value);
  else {if(![self editable:node])return;[self writeParameter:name part:[self partOf:node] value:value gesture:gesture];}
@@ -407,7 +413,7 @@ NSString* bindingKey(NSString* name,NSInteger part) {return [NSString stringWith
   NSString* type=focused[@"type"];NSDictionary* a=focused[@"attrs"];
   if(event.keyCode==49||event.keyCode==36){NSRect r=rectOf(focused[@"absolute_rect"]);NSPoint point=[self convertPoint:NSMakePoint(NSMidX(r),NSMidY(r)) toView:nil];NSEvent* click=[NSEvent mouseEventWithType:NSEventTypeLeftMouseDown location:point modifierFlags:0 timestamp:event.timestamp windowNumber:self.window.windowNumber context:nil eventNumber:0 clickCount:1 pressure:1];[self mouseDown:click];[self mouseUp:click];return;}
   if(event.keyCode>=123&&event.keyCode<=126){double value=[self plain:a[@"Parameter"] part:[self partOf:focused]];bool forward=event.keyCode==124||event.keyCode==126;
-   if([type isEqual:@"RadioButton"]){std::vector<double> choices;for(NSDictionary* node in nodes)if([node[@"type"]isEqual:@"RadioButton"]&&[node[@"attrs"][@"Parameter"]isEqual:a[@"Parameter"]]&&[self visible:node])choices.push_back([node[@"attrs"][@"OnValue"]doubleValue]);std::sort(choices.begin(),choices.end());choices.erase(std::unique(choices.begin(),choices.end()),choices.end());if(!choices.empty()){auto it=std::lower_bound(choices.begin(),choices.end(),value);int i=int(it-choices.begin());i=(i+(forward?1:-1)+choices.size())%choices.size();[self applyNode:focused plain:choices[i] gesture:YES];}return;}
+   if([type isEqual:@"RadioButton"]){std::vector<double> choices;for(NSDictionary* node in nodes)if([node[@"type"]isEqual:@"RadioButton"]&&[node[@"attrs"][@"Parameter"]isEqual:a[@"Parameter"]]&&[self visible:node]&&[self editable:node])choices.push_back([node[@"attrs"][@"OnValue"]doubleValue]);std::sort(choices.begin(),choices.end());choices.erase(std::unique(choices.begin(),choices.end()),choices.end());if(!choices.empty()){auto it=std::lower_bound(choices.begin(),choices.end(),value);int i=int(it-choices.begin());i=(i+(forward?1:-1)+choices.size())%choices.size();[self applyNode:focused plain:choices[i] gesture:YES];}return;}
    [self applyNode:focused plain:value+(forward?1:-1) gesture:YES];return;}
  }
  [super keyDown:event];

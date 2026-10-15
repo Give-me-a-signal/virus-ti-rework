@@ -11,6 +11,12 @@ rtk proxy cmake --build native/hardware-bench/build --target hardware-bench -j 6
 
 Use a new output directory for each run; existing artifact names are overwritten.
 
+Discovery uses the [shared model rules](../../docs/device-model-audit.md), including
+Snow refusal before MIDI/device commands. This historical bench remains a TI
+Desktop development tool; recognition of another model is not authorization to
+run its write modes or evidence of compatibility. Reports retain the real audio
+device name instead of replacing it with `Virus TI`.
+
 - `--inspect OUTPUT`: device formats only.
 - `--query OUTPUT`: request Single, part-1 and multi edit buffers plus the legacy global request (no global reply observed).
 - `--private-query OUTPUT`: same edit-buffer queries over the hidden interface; observed replies arrive via CoreMIDI.

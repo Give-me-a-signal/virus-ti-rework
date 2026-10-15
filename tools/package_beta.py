@@ -15,9 +15,15 @@ def hashes(root):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('build', type=pathlib.Path)
+    parser.add_argument('--snow-test', action='store_true', help='Label/package the unverified Snow playback preview')
     args = parser.parse_args()
     build = args.build.resolve()
-    output = ROOT/'dist'/f'Virus-TI-Rework-{VERSION}-macOS-arm64'
+    version = '0.2.0-snow-test.1' if args.snow_test else VERSION
+    cache = (build/'CMakeCache.txt').read_text()
+    is_snow = 'VTR_SNOW_PLAYBACK_TEST_BUILD:BOOL=ON' in cache
+    if is_snow != args.snow_test:
+        raise RuntimeError('Snow build/package flag mismatch; refusing misleading release label')
+    output = ROOT/'dist'/f'Virus-TI-Rework-{version}-macOS-arm64'
     if output.exists():
         shutil.rmtree(output)
     output.mkdir(parents=True)
@@ -90,9 +96,23 @@ Real-time recording only; the hardware cannot render offline.
 Documentation, limitations and test reports:
 https://github.com/Give-me-a-signal/virus-ti-rework
 ''')
+    if args.snow_test:
+        (output/'INSTALL.txt').write_text((ROOT/'docs/SNOW_TEST_BUILD.md').read_text())
+        (output/'release-validation.json').write_text(json.dumps({
+            'scope': 'Snow playback test 1, unverified hardware',
+            'physical_snow_tested': False, 'emulator_is_not_usb_validation': True,
+            'standard_build_keeps_snow_blocked': False,
+            'requires_explicit_per_session_consent': False,
+            'snow_connection_action': 'Connect TI',
+            'requires_manual_snow_connection': True,
+            'requires_recovery_session_record': True,
+            'requires_current_format_stable_originals': True,
+            'firmware_operations': False, 'stored_bank_writes': False,
+            'instructions': 'INSTALL.txt',
+        }, indent=2)+'\n')
     commit = subprocess.check_output(['git','rev-parse','HEAD'], cwd=ROOT, text=True).strip()
     dirty = bool(subprocess.check_output(['git','status','--porcelain'], cwd=ROOT, text=True).strip())
-    report = {'version': VERSION, 'commit': commit, 'dirty': dirty, 'architecture': 'arm64',
+    report = {'version': version, 'snow_playback_test': args.snow_test, 'physical_snow_verified': False, 'commit': commit, 'dirty': dirty, 'architecture': 'arm64',
               'developer_id_signed': False, 'notarized': False,
               'access_package_required': False, 'validation': 'See release-validation.json',
               'files': hashes(output)}

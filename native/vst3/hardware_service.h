@@ -31,6 +31,7 @@ public:
  bool connected() const noexcept;
  uint64_t stateRevision() const noexcept;
  unsigned latency() const noexcept;
+ unsigned activePartCount() const noexcept;
 private:
  struct Impl;
  std::unique_ptr<Impl> impl;
