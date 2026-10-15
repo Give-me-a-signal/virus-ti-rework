@@ -1,4 +1,5 @@
 #include "plugin.h"
+#include <cstdlib>
 #include "editor.h"
 #include "browser_bank.hpp"
 #include "midi_core.hpp"
@@ -61,8 +62,10 @@ Processor::Processor() {
 Processor::~Processor() {hardware_->shutdownControl();hardware_.reset();bridge_->restart(false);bridge_->release();}
 tresult PLUGIN_API Processor::terminate(){hardware_->shutdown();return AudioEffect::terminate();}
 tresult PLUGIN_API Processor::setupProcessing(ProcessSetup& setup) {
- if(!std::isfinite(setup.sampleRate)||setup.sampleRate<32000||setup.sampleRate>192000)return kInvalidArgument;
- auto result=AudioEffect::setupProcessing(setup);if(result==kResultOk)hardware_->setup(setup.sampleRate);return result;
+ if(!std::isfinite(setup.sampleRate)||setup.sampleRate<32000||setup.sampleRate>192000||setup.maxSamplesPerBlock<1)return kInvalidArgument;
+ // This opt-in transport must fit the unambiguous 14-bit device horizon.
+ if(std::getenv("VTR_ENABLE_MARKER_TIMING")&&std::strcmp(std::getenv("VTR_ENABLE_MARKER_TIMING"),"1")==0&&setup.maxSamplesPerBlock*48000./setup.sampleRate+2048>=8192)return kInvalidArgument;
+ auto result=AudioEffect::setupProcessing(setup);if(result==kResultOk)hardware_->setup(setup.sampleRate,setup.maxSamplesPerBlock);return result;
 }
 uint32 PLUGIN_API Processor::getLatencySamples(){return bridge_==&disconnected_?hardware_->latency():0;}
 tresult PLUGIN_API Processor::notify(IMessage* message){
@@ -141,7 +144,8 @@ tresult PLUGIN_API Processor::process(ProcessData& d) {
    else projectValid_=false;
   }
  } else projectValid_=false;
- if(bridge_==&disconnected_)hardware_->beginBlock(active_&&processing_&&d.processMode!=kOffline);
+ if(bridge_==&disconnected_){auto* c=d.processContext;hardware_->beginBlock(active_&&processing_&&d.processMode!=kOffline,unsigned(d.numSamples),c&&(c->state&ProcessContext::kTempoValid)?c->tempo:120,c?c->projectTimeMusic:0,c&&(c->state&ProcessContext::kPlaying),c&&(c->state&ProcessContext::kProjectTimeMusicValid));}
+ auto queueMidi=[&](unsigned offset,const std::array<uint8_t,3>& bytes){return bridge_==&disconnected_?hardware_->queueMidi(offset,bytes):bridge_->send(hostFrame_,offset,bytes);};
  // Host buffers always initialized, including inactive/disconnected/underrun.
 
  for(int b=0;b<d.numOutputs;++b) {
@@ -180,7 +184,7 @@ tresult PLUGIN_API Processor::process(ProcessData& d) {
     if(spec.midiCC>=0&&active_&&processing_&&d.numSamples>0&&d.processMode!=kOffline) {
      std::array<uint8_t,3> bytes{};
      auto discrete=static_cast<unsigned>(std::lround(spec.minimum+value*(spec.maximum-spec.minimum)));
-     if(virus::midi::build_control_change(spec.part-1,spec.midiCC,discrete,bytes))bridge_->send(hostFrame_,offset,bytes);
+     if(virus::midi::build_control_change(spec.part-1,spec.midiCC,discrete,bytes))queueMidi(offset,bytes);
     }
    }
   }
@@ -203,12 +207,13 @@ tresult PLUGIN_API Processor::process(ProcessData& d) {
     if(event.type==Event::kNoteOnEvent)bytes={static_cast<uint8_t>(0x90|event.noteOn.channel),static_cast<uint8_t>(event.noteOn.pitch),static_cast<uint8_t>(std::lround(event.noteOn.velocity*127))};
     else if(event.type==Event::kNoteOffEvent)bytes={static_cast<uint8_t>(0x80|event.noteOff.channel),static_cast<uint8_t>(event.noteOff.pitch),static_cast<uint8_t>(std::lround(event.noteOff.velocity*127))};
     else virus::midi::build_poly_pressure(event.polyPressure.channel,event.polyPressure.pitch,static_cast<unsigned>(std::lround(event.polyPressure.pressure*127)),bytes);
-    if(active_&&processing_&&d.processMode!=kOffline)bridge_->send(hostFrame_,event.sampleOffset,bytes);
+    if(active_&&processing_&&d.processMode!=kOffline)queueMidi(event.sampleOffset,bytes);
    } else ++rejected_;
   }
  }
  hostFrame_+=static_cast<uint64_t>(d.numSamples);
  bridge_->completeBlock(hostFrame_);
+ if(bridge_==&disconnected_)hardware_->endBlock();
  return kResultOk;
 }
 tresult PLUGIN_API Processor::getState(IBStream* stream) {

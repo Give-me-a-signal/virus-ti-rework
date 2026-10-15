@@ -518,3 +518,5 @@ suites and VST3 validator, and produces a checksum-indexed ZIP. The macOS CI add
 Version tags on reviewed `main` publish beta prereleases only after CI passes. See
 [binary architecture](docs/BINARY_ARCHITECTURE.md) and [beta release notes](docs/BETA_RELEASE.md).
 Developer ID signing and notarization remain future distribution work.
+
+Developer follow-up: [ownership/recall findings](docs/collaborator-findings-5.md) and [experimental marker-timing design and test limits](docs/marker-clock-integration.md). Marker timing is disabled by default pending hardware validation; these drafts do not change the released beta.

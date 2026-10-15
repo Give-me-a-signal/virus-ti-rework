@@ -165,3 +165,19 @@ add_executable(recall_policy_tests recall_policy_tests.cpp)
 target_include_directories(recall_policy_tests PRIVATE ../editor)
 target_compile_options(recall_policy_tests PRIVATE -UNDEBUG)
 add_test(NAME recall_policy_tests COMMAND recall_policy_tests)
+
+add_executable(timing_tests timing_tests.cpp)
+target_include_directories(timing_tests PRIVATE ../transport-core/include)
+target_compile_options(timing_tests PRIVATE -UNDEBUG)
+add_test(NAME timing_tests COMMAND timing_tests)
+
+add_test(NAME timing_capture_audit COMMAND ${Python3_EXECUTABLE} "${VTR_SOURCE_ROOT}/tools/test_timing_audit.py")
+add_executable(protocol_bench protocol_bench.mm "${SDK_ROOT}/public.sdk/source/vst/hosting/module_mac.mm" "${SDK_ROOT}/public.sdk/source/vst/hosting/plugprovider.cpp")
+set_source_files_properties(protocol_bench.mm "${SDK_ROOT}/public.sdk/source/vst/hosting/module_mac.mm" PROPERTIES COMPILE_FLAGS "-fobjc-arc")
+target_include_directories(protocol_bench PRIVATE "${SDK_ROOT}")
+target_link_libraries(protocol_bench PRIVATE sdk_hosting "-framework Cocoa" "-framework AudioToolbox")
+
+add_test(NAME protocol_scan COMMAND ${Python3_EXECUTABLE} "${VTR_SOURCE_ROOT}/tools/test_protocol_scan.py" "$<TARGET_FILE:protocol_bench>" "$<TARGET_BUNDLE_DIR:VirusTIRework>" "$<TARGET_BUNDLE_DIR:VirusTIReworkAU>")
+
+add_test(NAME protocol_ownership COMMAND ${Python3_EXECUTABLE} "${VTR_SOURCE_ROOT}/tools/test_protocol_ownership.py" "$<TARGET_FILE:protocol_bench>" "$<TARGET_BUNDLE_DIR:VirusTIRework>" "$<TARGET_BUNDLE_DIR:VirusTIReworkAU>")
+set_tests_properties(protocol_scan protocol_ownership PROPERTIES RUN_SERIAL TRUE)

@@ -26,6 +26,7 @@ public:
  uint64_t registryID()const{return privateUSB?privateUSB->registryID:0;}
  void savePrivate(NSString* dir){if(privateUSB){privateUSB->saveTraffic(dir);if(!privateUSB->readerError().empty())throw std::runtime_error(privateUSB->readerError());}}
  void request(uint8_t command,uint8_t program=0x40){if(command!=0x30&&command!=0x31&&command!=0x35)throw std::runtime_error("Read-request allowlist");send({0xf0,0,0x20,0x33,1,0x10,command,0,program,0xf7});}
+ void sendTimed(const std::vector<uint8_t>& bytes,uint16_t stamp,bool clock=false){if(!privateUSB)throw std::runtime_error("Timed MIDI requires private interface ownership");privateUSB->sendTimed(bytes,stamp,clock);}
  void send(const std::vector<uint8_t>& data){
   VirusRework::validateMidi(data);
   if(privateUSB){privateUSB->sendMessage(data);return;}
