@@ -26,6 +26,11 @@ namespace VirusRework {
 using virus::hardware::Midi;
 using virus::hardware::check;
 namespace {
+#ifdef VTR_TIMING_DAW_TEST_BUILD
+constexpr bool timingDawTestBuild=true;
+#else
+constexpr bool timingDawTestBuild=false;
+#endif
 NSString* resources(){auto root=[[NSBundle bundleForClass:VTRHardwareBundleMarker.class]resourcePath];
 #ifdef VTR_BUNDLE_RESOURCES
  if(![[NSFileManager defaultManager]fileExistsAtPath:[root stringByAppendingPathComponent:@"PatchBanks"]])root=@VTR_BUNDLE_RESOURCES;
@@ -70,7 +75,7 @@ struct HardwareService::Impl {
  std::atomic<virus::clock::SyncState> syncState{virus::clock::SyncState::inactive};
  // Hardware acceptance must pass before changing this default. The private
  // bench opts in explicitly; ordinary installations keep immediate delivery.
- bool timingEnabled=std::getenv("VTR_ENABLE_MARKER_TIMING")&&std::string(std::getenv("VTR_ENABLE_MARKER_TIMING"))=="1";
+ bool timingEnabled=[] {auto* option=std::getenv("VTR_ENABLE_MARKER_TIMING");return option?std::string(option)=="1":timingDawTestBuild;}();
  PerformanceQueue performance;
  std::atomic<uint64_t> lateEvents{0};
  std::atomic<bool> panicPending{false};
@@ -226,7 +231,7 @@ struct HardwareService::Impl {
   result[@"device_lease_held"]=@(leaseHeld.load());result[@"connected"]=@(live.load());result[@"busy"]=@(busy.load());result[@"completed_request_id"]=@(completed.load());
   result[@"state_recall_pending"]=@(recallPending.load());result[@"state_format"]=@3;result[@"backend"]=emulator?@"emulator":@"hardware";
   {std::lock_guard<std::mutex> g(stateLock);NSMutableArray* parts=[NSMutableArray array];for(unsigned p=0;p<16;++p){auto& bytes=staged.parts[p].empty()?loaded.parts[p]:staged.parts[p];[parts addObject:@{@"part":@(p+1),@"name":bytes.empty()?@"":@(virus::patches::parse_single(bytes).name.c_str()),@"bytes":@(bytes.size())}];}result[@"parts"]=parts;}
-  result[@"reported_latency_samples"]=@(reportedLatency.load());
+  result[@"reported_latency_samples"]=@(reportedLatency.load());result[@"timing_daw_test_build"]=@(timingDawTestBuild);
   result[@"host_processing"]=@(hostProcessing.load());result[@"host_sample_rate"]=@(rate.load());result[@"device_sample_rate"]=@48000;
   result[@"firmware_operations_supported"]=@NO;result[@"stored_bank_writes_supported"]=@NO;
   result[@"lifetime_counters"]=@{@"capture_callbacks":@(callbacks.load()),@"capture_errors":@(invalidCapture.load()),@"fifo_overruns":@(capture.overruns.load()),@"fifo_underruns":@(capture.underruns.load()),@"rendered_frames":@(capture.rendered.load()),@"midi_sent":@(notesSent.load())};

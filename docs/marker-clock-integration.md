@@ -3,7 +3,14 @@
 This is a **draft implementation**, not a validated timing release. Normal
 plug-in operation retains immediate MIDI delivery. The experimental host must
 explicitly set `VTR_ENABLE_MARKER_TIMING=1`; do not set that on a production DAW.
-The released beta and installed plug-ins are not replaced by these builds.
+These build targets do not install plug-ins automatically or replace the published beta.
+
+For disposable Logic/Bitwig tests, a separate build directory may explicitly set
+`-DVTR_TIMING_DAW_TEST_BUILD=ON`. This opts only those test bundles into timing
+without changing the GUI app's environment or the ordinary build default.
+`VTR_ENABLE_MARKER_TIMING=0` still overrides it. The status API identifies the
+test build; the release packager refuses it. Back up installed bundles before
+temporarily using it and restore them after the test. Never distribute that build.
 
 ## Design
 
@@ -41,7 +48,7 @@ calibration ping. Audio callbacks perform no USB I/O, allocation or mutex waits.
 
 `status` keeps its existing fields and adds `device_lease_held`, `timing_enabled`,
 `timing_status`, `timing_marker_frame`, `timing_overflow`, `timing_late_events`,
-`performance_dropped` and `automation_coalesced`. These are per-instance/lifetime
+`performance_dropped`, `automation_coalesced` and `reported_latency_samples`. These are per-instance/lifetime
 diagnostics, not proof that hardware scheduling is accurate. Editor status says
 whether timing is locked or unsynchronized. No new automation parameter, class
 ID or saved-state format is introduced.
@@ -70,7 +77,10 @@ refused connections in each format, with both processes alive; cleanup retains
 the owner's lease. This is a refusal test with no device I/O, not a live-audio
 ownership test.
 
-**Hardware acceptance is pending.** A marker-shaped response alone does not prove
+**Full hardware acceptance is pending.** The initial 48 kHz/256-frame measurements
+passed for VST3 on return 1 and AU on return 2, including sounding cross-format
+refusal in the AU case. See the [dated validation record](ownership-timing-validation-2026-10-15.md)
+for exact builds, measurements and outstanding checks. A marker-shaped response alone does not prove
 the 48 kHz clock relationship. It must be checked using recorded stamped notes,
 reported latency and all three returns before changing the default. A failed
 experimental calibration is reported as unsynchronized; stop that bench and

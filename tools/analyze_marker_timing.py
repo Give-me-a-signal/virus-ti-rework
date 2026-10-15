@@ -29,7 +29,9 @@ def analyze(path, rate, first_frame, latency, bus=1, count=256):
             if armed and level >= high and frame - last > rate * .080:
                 onsets.append(frame); last = frame; armed = False
             quiet = 0
-    expected = [first_frame + round(i * rate * .125) + latency for i in range(count)]
+    # Match protocol_bench's nonnegative std::llround offsets (not Python's
+    # ties-to-even round at 44.1 kHz half-sample positions).
+    expected = [first_frame + math.floor(i * rate * .125 + .5) + latency for i in range(count)]
     errors = [(a - b) / rate for a, b in zip(onsets, expected)]
     result = {'rate': rate, 'bus': bus, 'expected_notes': count, 'detected_onsets': len(onsets),
               'reported_latency_samples': latency, 'threshold_fraction': .02,
