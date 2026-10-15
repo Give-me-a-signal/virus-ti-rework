@@ -12,6 +12,7 @@
   text(titles[std::clamp(selectedPage,0L,12L)],NSMakeRect(219,54,640,20),11,p.text,NO,NSFontWeightSemibold);
   text(@"Dimmed controls are unavailable. Graphs are illustrative. Hardware produces the audio.",NSMakeRect(219,444,650,13),8,p.muted);
   if(selectedPage==0)text(@"Connect your TI, choose a part, then open an editor page or import your own patch bank in Browser.",NSMakeRect(230,110,620,80),13,p.text);
+  if(selectedPage==8)text(@"Remote template support is not available in this beta.",NSMakeRect(230,110,620,80),13,p.muted);
   if(selectedPage==12)text(@"Native arm64 • AU / VST3 • three stereo returns • RAM recall and restoration\nUse Import Original… to optionally add the original Access appearance.",NSMakeRect(230,110,620,90),13,p.text);
   return;
  }

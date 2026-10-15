@@ -11,8 +11,8 @@ inline NSDictionary* builtinEditorModel() {
   [nodes addObject:@{@"id":[NSString stringWithFormat:@"owned%lu",nodes.count],@"type":type,@"attrs":a,@"page":@(page),@"parent_id":NSNull.null,@"absolute_rect":@{@"left":@(x),@"top":@(y),@"width":@(w),@"height":@(h)},@"sprites":@{}}];
  };
  parameter(@"VirusControl/SelectedPage",0,12,0);parameter(@"Multi Parameters/Panel Part",0,15,0);
- const int pages[]={0,1,2,3,4,5,6,7,11,9,12};
- for(int i=0;i<11;++i)node(@"RadioButton",@"VirusControl/SelectedPage",-1,-1,203+i*62,15,61,25,@(pages[i]));
+ const int pages[]={0,1,2,3,4,5,6,7,11,9,8,12};
+ for(int i=0;i<12;++i)node(@"RadioButton",@"VirusControl/SelectedPage",-1,-1,203+i*57,15,56,25,@(pages[i]));
  for(int p=0;p<16;++p){node(@"RadioButton",@"Multi Parameters/Panel Part",p,-1,12,52+p*26,25,23,@(p));node(@"NameEdit",@"Patch Name",p,-1,42,56+p*26,112,18);node(@"VUSlider",@"Internal MIDI Standard Parameters/07 Volume",p,-1,158,58+p*26,27,12);}
  int slots[13]{};
  auto pageFor=[](NSString* name){if([name hasPrefix:@"Osc"]||[name hasPrefix:@"Noise"]||[name hasPrefix:@"Subosc"]||[name hasPrefix:@"Ring"]||[name hasPrefix:@"Unison"])return 2;

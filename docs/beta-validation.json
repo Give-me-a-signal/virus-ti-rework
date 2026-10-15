@@ -8,13 +8,14 @@
     "architecture": "arm64"
   },
   "offline": {
-    "project_suites": 8,
-    "passed": 8,
+    "project_suites": 9,
+    "passed": 9,
     "vst3_validator_passed": 47,
     "vst3_validator_failed": 0,
     "auval_strict": "passed",
     "setup_transactions": "passed",
-    "original_appearance_import_and_reimport": "passed"
+    "original_appearance_import_and_reimport": "passed",
+    "editor": "Dark/Polar: 12 pages at 100/150/200%; optional Original Access: 12 rendered pages"
   },
   "hardware": {
     "model": "TI Desktop",
@@ -64,7 +65,18 @@
         },
         "restoration": "restored"
       }
-    ]
+    ],
+    "au": {
+      "rate": 96000,
+      "block": 256,
+      "real_hardware_audio": true,
+      "second_vst3_ownership_rejected": true,
+      "capture_errors": 0,
+      "fifo_overruns": 0,
+      "fifo_underruns": 0,
+      "recovery": "independent recovery after AU host exit passed",
+      "rendered_peak": 0.0274348
+    }
   },
   "not_tested": [
     "Logic Pro",
