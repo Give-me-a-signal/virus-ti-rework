@@ -84,6 +84,7 @@ struct HardwareService::Impl {
  double blockStart=0,blockStep=1,blockTempo=120,blockBeats=0,nextClock=0;
  bool blockPlaying=false,blockBeatsValid=false,blockCanSend=false,blockLocked=false,clockAnchored=false;
  uint64_t audioGeneration=0;
+ uint64_t handledUnderruns=0; // audio consumer only
 
  USBMeters usbMeters;
  MIDIActivity midiActivity;
@@ -247,12 +248,12 @@ struct HardwareService::Impl {
  static OSStatus audio(AudioDeviceID,const AudioTimeStamp*,const AudioBufferList* input,const AudioTimeStamp*,AudioBufferList*,const AudioTimeStamp*,void* ref){
   auto& s=*static_cast<Impl*>(ref);++s.callbacks;
   // This is capture-only. Do not write the DAW's audio output buffers.
-  if(!input||input->mNumberBuffers!=1||input->mBuffers[0].mNumberChannels!=6||!input->mBuffers[0].mData||input->mBuffers[0].mDataByteSize%24){++s.invalidCapture;return noErr;}
+  if(!input||input->mNumberBuffers!=1||input->mBuffers[0].mNumberChannels!=6||!input->mBuffers[0].mData||input->mBuffers[0].mDataByteSize%24){++s.invalidCapture;s.marker.disarm();if(s.syncState.exchange(virus::clock::SyncState::degraded)==virus::clock::SyncState::locked)s.panicPending=true;return noErr;}
   auto* samples=static_cast<const float*>(input->mBuffers[0].mData);auto frames=input->mBuffers[0].mDataByteSize/24;
   for(unsigned c=0;c<6;c++){float peak=s.rawPeak[c].load(std::memory_order_relaxed);for(unsigned f=0;f<frames;f++)if(std::isfinite(samples[f*6+c]))peak=std::max(peak,std::abs(samples[f*6+c]));s.rawPeak[c].store(peak,std::memory_order_relaxed);}
   auto first=s.capture.newest();
   if(s.capture.push(samples,frames)){s.marker.feed(samples,frames,first);auto found=s.marker.validMarker();if(found>=0)s.capture.suppressCalibrationMarker(found);}
-  else {s.syncState=virus::clock::SyncState::degraded;s.panicPending=true;}
+  else {s.marker.disarm();s.syncState=virus::clock::SyncState::degraded;s.panicPending=true;}
   s.usbMeters.push(samples,frames);return noErr;
  }
  void save(NSString* name,const std::vector<uint8_t>& bytes){if(![[NSData dataWithBytes:bytes.data() length:bytes.size()]writeToFile:[directory stringByAppendingPathComponent:name] atomically:YES])throw std::runtime_error("Cannot save hardware snapshot");}
@@ -514,7 +515,17 @@ void HardwareService::endBlock()noexcept{
  s.performance.end();
 }
 bool HardwareService::render(std::array<int32_t,6>& value)noexcept{
- if(!impl->consumerLive||!impl->capture.pop(value))return false;
+ if(!impl->consumerLive)return false;
+ if(!impl->capture.pop(value)){
+  const auto count=impl->capture.underruns.load();
+  if(count!=impl->handledUnderruns){
+   impl->handledUnderruns=count;
+   // A confirmed marker cannot justify synchronized playback after a capture
+   // gap. Cancel the old epoch on the worker; never reping under held notes.
+   if(impl->timingEnabled){impl->marker.disarm();impl->syncState=virus::clock::SyncState::degraded;impl->panicPending=true;impl->blockLocked=false;impl->blockCanSend=false;}
+  }
+  return false;
+ }
  for(unsigned c=0;c<6;c++){float peak=float(std::abs(double(value[c])/2147483648.));if(peak>impl->renderedPeak[c].load(std::memory_order_relaxed))impl->renderedPeak[c].store(peak,std::memory_order_relaxed);}
  return true;
 }
@@ -522,4 +533,20 @@ void HardwareService::hostProcessing(bool active)noexcept{impl->hostProcessing.s
 bool HardwareService::connected()const noexcept{return impl->live.load(std::memory_order_acquire);}
 uint64_t HardwareService::stateRevision()const noexcept{return impl->stateRevision.load();}
 unsigned HardwareService::latency()const noexcept{return impl->reportedLatency.load();}
+#ifdef VIRUS_REWORK_TEST
+bool HardwareService::testCaptureUnderrunFallback(){
+ virus::bridge::DeviceBridge bridge;HardwareService service(bridge);auto& s=*service.impl;
+ bridge.restart(true);bridge.serviceReady(bridge.generation());
+ s.timingEnabled=true;s.syncState=virus::clock::SyncState::locked;
+ s.capture.setup(48000);std::array<float,1024*6> silence{};
+ if(!s.capture.push(silence.data(),1024))return false;
+ s.capture.beginAlignedBlock(900);s.consumerLive=true;s.blockLocked=true;s.blockCanSend=true;
+ std::array<int32_t,6> value{};for(unsigned i=0;i<256;++i)service.render(value);
+ const bool degraded=s.capture.underruns==1&&s.syncState==virus::clock::SyncState::degraded&&s.panicPending&&!s.blockLocked&&!s.blockCanSend;
+ auto previous=bridge.generation();s.drainPerformance(); // control-thread cancellation path
+ const bool blocked=!bridge.ready();bridge.beginBlock(); // processor consumes the epoch change
+ s.consumerLive=false;
+ return degraded&&blocked&&bridge.generation()!=previous&&!s.panicPending&&!s.leaseHeld&&!s.live&&s.callbacks==0&&s.notesSent==0;
+}
+#endif
 }

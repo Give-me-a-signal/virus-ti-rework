@@ -1,5 +1,6 @@
 #include "plugin.h"
 #include "midi_safety.h"
+#include "hardware_service.h"
 #include "public.sdk/source/common/memorystream.h"
 #include "public.sdk/source/vst/hosting/parameterchanges.h"
 #include "public.sdk/source/vst/hosting/eventlist.h"
@@ -244,6 +245,7 @@ int main() {
  data.numSamples=128;data.numOutputs=0;data.outputs=nullptr;data.inputEvents=&flood;
  CHECK(process(p,data)==kResultOk);CHECK(p.acceptedEvents()==accepted+4096);CHECK(p.rejectedEvents()==rejected+904);
  connectedBridgeTests();
+ CHECK(HardwareService::testCaptureUnderrunFallback());
  CHECK(processAllocations==0);
  p.terminate();c.terminate();
  std::cout<<"PASS: native processor/controller, nonzero six-channel PCM, exact MIDI offsets, bridge lifecycle, underrun, discontinuity, zero process allocations, catalog, state and "<<raw.size()<<" state truncations\n";

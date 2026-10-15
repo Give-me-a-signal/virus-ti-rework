@@ -33,6 +33,9 @@ public:
  bool connected() const noexcept;
  uint64_t stateRevision() const noexcept;
  unsigned latency() const noexcept;
+#ifdef VIRUS_REWORK_TEST
+ static bool testCaptureUnderrunFallback(); // synthetic FIFO exhaustion; no device I/O
+#endif
 private:
  struct Impl;
  std::unique_ptr<Impl> impl;

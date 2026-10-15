@@ -45,10 +45,39 @@ or arbitrary-patch timing guarantee.
 
 ## Outstanding acceptance
 
-Marker-pattern detection is separate from proof of the 48 kHz clock relationship.
-The first physical timing measurements passed. The full AU/VST3 matrix at
-44.1/48/96 kHz with 64/256/512-frame blocks, all three returns, sounding ownership
-continuity and current-build Logic/Bitwig save/reopen remain pending.
+**Synchronization acceptance failed; its default remains off.** Fourteen cases
+passed, then AU at 48 kHz/512 frames on return 3 recorded three FIFO underruns
+and only 255 detected onsets despite 256 submitted note-ons and note-offs.
+There were no additional raw capture-format errors, overruns or late events.
+Original RAM restoration and both protocol audits passed after the failure.
+The matrix stopped; AU's three 96 kHz cases were not run. The underlying cause
+(engine read positioning versus bench scheduling) has not been established.
+No constant, command allowlist or USB reset was changed to force a pass.
+
+| Format | 44.1 kHz: 64 / 256 / 512 | 48 kHz: 64 / 256 / 512 | 96 kHz: 64 / 256 / 512 |
+| --- | --- | --- | --- |
+| VST3 | Pass / Pass / Pass | Pass / Pass / Pass | Pass / Pass / Pass |
+| AU | Pass / Pass / Pass | Pass / Pass / **Fail** | Not tested / Not tested / Not tested |
+
+Each case recorded 256 scheduled notes. Returns 1/2/3 were selected across
+64/256/512-frame cases respectively, except the first VST3 48 kHz/256 case used
+return 1. All three returns were exercised in each format; this is not every
+return at every rate/buffer combination. Passed cases met the thresholds below
+with no additional capture errors, underruns, overruns, late events or queue
+overflow during their measured sequences. AU 48 kHz/256 and VST3 96 kHz/512
+also refused the opposite format during sounding playback without losing notes.
+
+The failure exposed an additional fault-handling bug: FIFO underruns could leave
+the status labelled locked. The follow-up cancels that marker, degrades timing,
+requests a performance-epoch cancellation/panic and uses immediate transport;
+malformed capture and overruns also invalidate the marker. A synthetic exhausted
+FIFO regression exercises the actual service render/cancellation path without
+opening hardware. This fixes false synchronization status; it does **not** claim
+to fix the underlying underrun or turn that failed recording into a pass.
+
+Current-build Logic/Bitwig save/reopen and a repeated timing matrix after the
+underrun investigation remain pending. The installed release bundles are
+unchanged; verified backups were prepared for later disposable DAW tests.
 
 The target is no missing/extra notes or new capture errors, corrected mean error
 within 1 ms, jitter standard deviation within 0.5 ms and drift within 10 ppm.
