@@ -95,6 +95,15 @@ https://github.com/Give-me-a-signal/virus-ti-rework
             raise RuntimeError(f'Release symlink: {p}')
         if p.is_file() and p.suffix.lower() in forbidden:
             raise RuntimeError(f'Forbidden release resource: {p}')
+        if p.is_file() and p.read_bytes()[:4] == b'\xcf\xfa\xed\xfe':
+            arch = subprocess.check_output(['lipo','-archs',str(p)],text=True).strip()
+            if arch != 'arm64':
+                raise RuntimeError(f'Unexpected release architecture: {p}: {arch}')
+            links = subprocess.check_output(['otool','-L',str(p)],text=True).splitlines()[1:]
+            for line in links:
+                dependency=line.strip().split(' (',1)[0]
+                if not dependency.startswith(('/usr/lib/','/System/Library/')):
+                    raise RuntimeError(f'External runtime dependency: {p}: {dependency}')
         if p.is_file() and (str(ROOT).encode() in p.read_bytes()):
             raise RuntimeError(f'Private build path in {p}')
     archive = pathlib.Path(str(output)+'.zip')

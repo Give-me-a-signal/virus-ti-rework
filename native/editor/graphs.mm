@@ -9,7 +9,7 @@ NSString* prefix(NSDictionary* attrs){NSString* n=attrs[@"Parameter"]?:@"";NSRan
 NSString* field(NSString* group,NSString* name){return [group stringByAppendingFormat:@"/%@",name];}
 }
 bool supports(NSString* type){return [@[@"ADSTREnvelope",@"LP4Response",@"HP4Response",@"BP4Response",@"BS4Response",@"OscClassicShape",@"OscHypersawShape"]containsObject:type];}
-Geometry geometry(NSString* type,NSDictionary* attrs,NSRect r,Read read){Geometry g;if(!supports(type)||!read||!std::isfinite(r.size.width)||!std::isfinite(r.size.height)||r.size.width<8||r.size.height<8)return g;
+Geometry geometry(NSString* type,NSDictionary* attrs,NSRect r,Read read){Geometry g;if(!supports(type)||!read||!std::isfinite(r.origin.x)||!std::isfinite(r.origin.y)||!std::isfinite(r.size.width)||!std::isfinite(r.size.height)||r.size.width<8||r.size.height<8)return g;
  NSString* group=prefix(attrs);double left=NSMinX(r)+3,right=NSMaxX(r)-3,top=NSMinY(r)+3,bottom=NSMaxY(r)-3,w=right-left,h=bottom-top;
  std::vector<NSPoint> path;
  if([type isEqual:@"ADSTREnvelope"]){double a=normalized(read,field(group,@"Attack")),d=normalized(read,field(group,@"Decay")),s=normalized(read,field(group,@"Sustain")),release=normalized(read,field(group,@"Release"));
