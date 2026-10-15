@@ -11,7 +11,9 @@ git -C "$ausdk" checkout --detach "$revision"
 if ! xcodebuild -version >/dev/null 2>&1; then
  export XCODE_VERSION="$(pkgutil --pkg-info com.apple.pkg.CLTools_Executables | awk '/^version:/{print $2}')"
 fi
-cmake -S "$root/native/vst3" -B "$build" -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0 -DPython3_EXECUTABLE="${VTR_PYTHON:-/usr/bin/python3}"
+# The SDK skips xcodebuild when the environment value exists but compares the
+# CMake variable. Supply both for a clean Command Line Tools-only checkout.
+cmake -S "$root/native/vst3" -B "$build" -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0 -DPython3_EXECUTABLE="${VTR_PYTHON:-/usr/bin/python3}" -DXCODE_VERSION="${XCODE_VERSION:-}"
 cmake --build "$build" -j 6
 ctest --test-dir "$build" --output-on-failure
 "$build/bin/Release/validator" "$build/VST3/Release/Virus TI Rework.vst3" > "$build/validator.log" 2>&1
