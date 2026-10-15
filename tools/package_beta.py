@@ -70,11 +70,19 @@ or SIP or run blanket quarantine-removal commands. Report installation
 blocks that this documented path cannot resolve.
 
 Dark and Polar work without Access software. Optional original artwork:
-choose Import Original Access Appearance in Setup or the editor and select
-your original Virus TI Software Suite 5.1.7.00.pkg. It is extracted, never run.
+get your own Virus TI Software Suite 5.1.7.00.pkg from Access (sign-in may
+be required): https://www.virus.info/download/585
+Do not run the old package. In Setup choose Import Original Access
+Appearance, or choose Import Original from the editor's appearance menu.
+Select the package, wait for import, then choose Original Access in the editor.
+Choose Modern UI to return to Dark/Polar. Import requires no developer tools;
+the package is checksum-verified and extracted without running vendor code.
+AU and VST3 share imported artwork outside the plug-in bundles.
 
 Use a disposable DAW project. TI Desktop is the initial hardware target;
-TI2/Snow and Logic/GarageBand require separate compatibility reports.
+TI2/Snow and GarageBand remain unverified. Bounded packaged beta tests cover
+Logic Pro, Bitwig, Ableton Live and LiveProfessor on M1 Pro/macOS 26.2.
+Coverage differs by host; see the README's Tested setups section.
 No firmware updates or stored-bank writes are supported. Keep the synth
 connected and powered until RAM restoration completes after disconnect/exit.
 Real-time recording only; the hardware cannot render offline.
