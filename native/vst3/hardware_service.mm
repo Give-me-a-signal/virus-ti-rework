@@ -103,6 +103,7 @@ struct HardwareService::Impl {
  bool snapshotFailed=false;
  std::string text="Disconnected · Start with TI in Single mode";
  std::atomic<double> rate{48000};
+ std::atomic<unsigned> reportedLatency{2048};
  bool consumerLive=false;
  std::unique_ptr<DeviceSession> midi;
  RestorationGuard restoration;
@@ -225,6 +226,7 @@ struct HardwareService::Impl {
   result[@"device_lease_held"]=@(leaseHeld.load());result[@"connected"]=@(live.load());result[@"busy"]=@(busy.load());result[@"completed_request_id"]=@(completed.load());
   result[@"state_recall_pending"]=@(recallPending.load());result[@"state_format"]=@3;result[@"backend"]=emulator?@"emulator":@"hardware";
   {std::lock_guard<std::mutex> g(stateLock);NSMutableArray* parts=[NSMutableArray array];for(unsigned p=0;p<16;++p){auto& bytes=staged.parts[p].empty()?loaded.parts[p]:staged.parts[p];[parts addObject:@{@"part":@(p+1),@"name":bytes.empty()?@"":@(virus::patches::parse_single(bytes).name.c_str()),@"bytes":@(bytes.size())}];}result[@"parts"]=parts;}
+  result[@"reported_latency_samples"]=@(reportedLatency.load());
   result[@"host_processing"]=@(hostProcessing.load());result[@"host_sample_rate"]=@(rate.load());result[@"device_sample_rate"]=@48000;
   result[@"firmware_operations_supported"]=@NO;result[@"stored_bank_writes_supported"]=@NO;
   result[@"lifetime_counters"]=@{@"capture_callbacks":@(callbacks.load()),@"capture_errors":@(invalidCapture.load()),@"fifo_overruns":@(capture.overruns.load()),@"fifo_underruns":@(capture.underruns.load()),@"rendered_frames":@(capture.rendered.load()),@"midi_sent":@(notesSent.load())};
@@ -477,7 +479,7 @@ bool HardwareService::restoreProject(const ProjectPatches& patch,bool reconnect,
 std::string HardwareService::controlEndpoint()const{return impl->control?impl->control->path():std::string{};}
 MeterSnapshot HardwareService::meters()const noexcept{MeterSnapshot result;result.usbPeak=impl->usbMeters.read(impl->live.load()&&impl->outputReady.load());result.midiActivity=impl->midiActivity.read(impl->live.load());return result;}
 std::string HardwareService::status()const{std::lock_guard<std::mutex> g(impl->stateLock);return impl->text+(impl->live.load()?std::string(" · Timing ")+(impl->syncState.load()==virus::clock::SyncState::locked?"locked":"unsynchronized"):"");}
-void HardwareService::setup(double rate,unsigned maxBlock){impl->rate=rate;impl->capture.setup(rate);impl->timeline.setup(rate,maxBlock);}
+void HardwareService::setup(double rate,unsigned maxBlock){impl->rate=rate;impl->capture.setup(rate);impl->timeline.setup(rate,maxBlock);impl->reportedLatency=impl->timingEnabled?impl->timeline.latencyHost():impl->capture.latency(rate);}
 void HardwareService::beginBlock(bool active,unsigned samples,double tempo,double beats,bool playing,bool beatsValid)noexcept{
  auto& s=*impl;s.hostProcessing.store(active);s.blockSamples=samples;s.blockTempo=std::isfinite(tempo)&&tempo>0?std::clamp(tempo,1.,1000.):120;s.blockBeats=beats;s.blockPlaying=playing;s.blockBeatsValid=beatsValid&&std::isfinite(beats);
  bool live=s.live.load(std::memory_order_acquire)&&s.outputReady.load(std::memory_order_acquire)&&active;
@@ -514,5 +516,5 @@ bool HardwareService::render(std::array<int32_t,6>& value)noexcept{
 void HardwareService::hostProcessing(bool active)noexcept{impl->hostProcessing.store(active);}
 bool HardwareService::connected()const noexcept{return impl->live.load(std::memory_order_acquire);}
 uint64_t HardwareService::stateRevision()const noexcept{return impl->stateRevision.load();}
-unsigned HardwareService::latency()const noexcept{return impl->timingEnabled?impl->timeline.latencyHost():impl->capture.latency(impl->rate.load());}
+unsigned HardwareService::latency()const noexcept{return impl->reportedLatency.load();}
 }
