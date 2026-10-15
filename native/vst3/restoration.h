@@ -1,5 +1,6 @@
 #pragma once
 #include "project_patches.h"
+#include "recall_policy.h"
 #include <fstream>
 #include <functional>
 
@@ -31,7 +32,7 @@ void restoreSnapshot(Device& midi,const RestoreSnapshot& original,Save save,Paus
  attempt("USB normalization",[&]{midi.send({0xf0,0,0x20,0x33,1,16,0x73,0,9,0,0xf7});});
  attempt("Single mode",[&]{midi.send({0xf0,0,0x20,0x33,1,16,0x73,0,122,0,0xf7});});pause(350);
  const auto& multi=original.project.multi;
- attempt("Multi restore",[&]{midi.send(multi);});
+ attempt("Multi restore",[&]{midi.send(multi);});pause(multiSettleMs);
  for(unsigned p=0;p<16;++p)attempt("Part references",[&]{midi.send({0xf0,0,0x20,0x33,1,16,0x72,uint8_t(p),32,multi[41+p],0xf7});midi.send({0xf0,0,0x20,0x33,1,16,0x72,uint8_t(p),33,multi[57+p],0xf7});});
  pause(300);
  for(unsigned p=0;p<16;++p){attempt("Part write",[&]{midi.send(original.project.parts[p]);});pause(100);}

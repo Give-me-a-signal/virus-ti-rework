@@ -8,12 +8,14 @@
 #include <thread>
 #include <vector>
 #include "private_usb.hpp"
+#include "dump_transaction.h"
 #include "../vst3/midi_safety.h"
 namespace virus::hardware {
 inline void check(OSStatus s,const char* op){if(s)throw std::runtime_error(std::string(op)+": "+std::to_string(s));}
 inline std::string midiName(MIDIObjectRef o){CFStringRef s=nullptr;MIDIObjectGetStringProperty(o,kMIDIPropertyDisplayName,&s);if(!s)return {};std::string r=[(__bridge NSString*)s UTF8String];CFRelease(s);return r;}
 class Midi {
  MIDIClientRef client=0;MIDIPortRef input=0,output=0;MIDIEndpointRef destination=0,source=0,externalSource=0;
+ std::mutex requestLock;
  std::mutex lock;std::array<std::vector<uint8_t>,2> assembling;std::vector<std::vector<uint8_t>> messages;std::vector<std::string> origins;
  std::unique_ptr<virus::private_midi::PrivateUSB> privateUSB;
  static void callback(const MIDIPacketList* list,void* context,void* sourceContext){auto* self=static_cast<Midi*>(context);std::lock_guard<std::mutex> guard(self->lock);auto& assembly=self->assembling[sourceContext?1:0];auto* p=&list->packet[0];for(UInt32 n=0;n<list->numPackets;n++,p=MIDIPacketNext(p))for(UInt16 i=0;i<p->length;i++){uint8_t b=p->data[i];if(b>=0xf8)continue;if(b==0xf0)assembly.clear();if(b==0xf0||!assembly.empty()){if(assembly.size()<65536)assembly.push_back(b);if(b==0xf7){self->messages.push_back(assembly);self->origins.push_back("CoreMIDI public");assembly.clear();}}}}
@@ -31,7 +33,20 @@ public:
  }
  std::vector<std::vector<uint8_t>> received(){std::lock_guard<std::mutex> guard(lock);return messages;}
  std::string origin(size_t index){std::lock_guard<std::mutex> guard(lock);return origins.at(index);}
- std::vector<uint8_t> single(uint8_t part,const std::function<void()>& idle={}){auto before=received().size();request(0x30,part);for(int n=0;n<100;n++){if(idle)idle();std::this_thread::sleep_for(std::chrono::milliseconds(10));auto all=received();for(size_t i=before;i<all.size();i++){auto& m=all[i];if(m.size()!=524||m[6]!=0x10||m[7]!=0||m[8]!=part)continue;unsigned a=0,b=0;for(size_t j=5;j<265;j++)a+=m[j];for(size_t j=5;j<522;j++)b+=m[j];if((a&127)!=m[265]||(b&127)!=m[522])throw std::runtime_error("Single checksum failed");return m;}}throw std::runtime_error("Single request timeout");}
- std::vector<uint8_t> multi(){auto before=received().size();request(0x31,0);for(int n=0;n<100;n++){std::this_thread::sleep_for(std::chrono::milliseconds(10));auto all=received();for(size_t i=before;i<all.size();i++){auto& m=all[i];if(m.size()!=267||m[6]!=0x11||m[7]!=0||m[8]!=127)continue;unsigned sum=0;for(int j=5;j<265;j++)sum+=m[j];if((sum&127)!=m[265])throw std::runtime_error("Multi checksum failed");return m;}}throw std::runtime_error("Multi request timeout");}
+ std::vector<uint8_t> editDump(uint8_t command,uint8_t part,const std::function<void()>& idle={}){
+  std::lock_guard<std::mutex> serial(requestLock);size_t before=0;
+  return readDump([&]{before=received().size();request(command,part);},[&]{
+   auto all=received();for(size_t i=before;i<all.size();++i){const auto& m=all[i];
+    const bool single=command==0x30;const size_t size=single?524:267;
+    if(m.size()!=size||m[0]!=0xf0||m[1]!=0||m[2]!=0x20||m[3]!=0x33||m[4]!=1||m[5]!=16||m[6]!=(single?0x10:0x11)||m[7]!=0||m[8]!=(single?part:127)||m.back()!=0xf7)continue;
+    for(size_t j=1;j<m.size()-1;++j)if(m[j]>=128)throw std::runtime_error("Invalid dump data");
+    unsigned sum=0;for(size_t j=5;j<265;++j)sum+=m[j];if((sum&127)!=m[265])throw std::runtime_error("Dump checksum failed");
+    if(single){sum=0;for(size_t j=5;j<522;++j)sum+=m[j];if((sum&127)!=m[522])throw std::runtime_error("Single checksum failed");}
+    return m;
+   }return std::vector<uint8_t>{};
+  },[&](unsigned ms){for(unsigned t=0;t<ms;t+=10){if(idle)idle();std::this_thread::sleep_for(std::chrono::milliseconds(10));}},[]{return std::chrono::steady_clock::now();});
+ }
+ std::vector<uint8_t> single(uint8_t part,const std::function<void()>& idle={}){if(part>=16&&part!=64)throw std::runtime_error("Invalid edit-buffer part");return editDump(0x30,part,idle);}
+ std::vector<uint8_t> multi(){return editDump(0x31,0);}
 };
 }
