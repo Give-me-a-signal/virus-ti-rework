@@ -41,7 +41,7 @@ public:
  void saveTraffic(const std::string& path)override{midi.savePrivate(@(path.c_str()));}
  uint64_t registryID()const{return midi.registryID();}
 };
-AudioDeviceID findDevice(DeviceModel& model,bool consent){
+AudioDeviceID findDevice(DeviceModel& model,bool snowOnly){
  AudioObjectPropertyAddress a{kAudioHardwarePropertyDevices,kAudioObjectPropertyScopeGlobal,kAudioObjectPropertyElementMain};UInt32 size=0;
  check(AudioObjectGetPropertyDataSize(kAudioObjectSystemObject,&a,0,nullptr,&size),"Enumerate audio");
  std::vector<AudioDeviceID> devices(size/sizeof(AudioDeviceID));check(AudioObjectGetPropertyData(kAudioObjectSystemObject,&a,0,nullptr,&size,devices.data()),"Read audio devices");
@@ -51,11 +51,10 @@ AudioDeviceID findDevice(DeviceModel& model,bool consent){
   const char* label=name?[(__bridge NSString*)name UTF8String]:nullptr;
   auto model=virus::identity::family(label?label:"");if(name)CFRelease(name);
   candidates.push_back({d,model});}
- // Reject Snow/ambiguity before opening MIDI, capture callbacks or device I/O.
- const AudioDeviceID found=virus::identity::selectAudioDevice(candidates,snowPlaybackTestBuild&&consent);
- for(auto candidate:candidates)if(candidate.id==found)model=candidate.model==virus::identity::Family::snow?DeviceModel::snow4:DeviceModel::ti16;
- requireVerifiedProfile(model,consent);
- if(consent&&model!=DeviceModel::snow4)throw std::runtime_error("Snow test requires a Snow device"); // Independent guard also used by helper recovery.
+ // Select one recognized model before opening MIDI/capture. Snow uses its own
+ // four-part contract in every build; multiple-device ambiguity is still fatal.
+ const AudioDeviceID found=virus::identity::selectAudioDevice(candidates);
+ for(auto candidate:candidates)if(candidate.id==found)model=connectionProfile(candidate.model,snowOnly);
  a={kAudioDevicePropertyStreams,kAudioDevicePropertyScopeInput,kAudioObjectPropertyElementMain};size=0;check(AudioObjectGetPropertyDataSize(found,&a,0,nullptr,&size),"Capture streams");
  if(size!=sizeof(AudioStreamID))throw std::runtime_error("Expected one TI capture stream");AudioStreamID stream=0;check(AudioObjectGetPropertyData(found,&a,0,nullptr,&size,&stream),"Capture stream");
  a={kAudioStreamPropertyVirtualFormat,kAudioObjectPropertyScopeGlobal,kAudioObjectPropertyElementMain};AudioStreamBasicDescription f{};size=sizeof(f);check(AudioObjectGetPropertyData(stream,&a,0,nullptr,&size,&f),"Capture format");
@@ -125,7 +124,7 @@ struct HardwareService::Impl {
  }
  ~Impl(){control.reset();stop=true;if(worker.joinable())worker.join();}
  uint64_t enqueue(int op, const std::vector<uint8_t>& patch={},unsigned target=0){
-  if(op<1||op>10||(op==10&&!snowPlaybackTestBuild)||target>=activeParts())return 0;
+  if(op<1||op>10||target>=activeParts())return 0;
   std::lock_guard<std::mutex> guard(commandLock);
   if(stop)return 0;
   if(busy.exchange(true))return 0;
@@ -162,7 +161,7 @@ struct HardwareService::Impl {
     id object=[NSJSONSerialization JSONObjectWithData:[command dataUsingEncoding:NSUTF8StringEncoding] options:0 error:nil];
     if(![object isKindOfClass:NSDictionary.class]||![object[@"command"]isKindOfClass:NSString.class])throw std::runtime_error("Invalid JSON command");args=object;command=args[@"command"];
    }
-   int op=[command isEqual:@"connect-snow-test"]&&snowPlaybackTestBuild?10:[command isEqual:@"connect"]?1:[command isEqual:@"disconnect"]?2:[command isEqual:@"test-tone"]?3:0;
+   int op=[command isEqual:@"connect-snow-test"]?10:[command isEqual:@"connect"]?1:[command isEqual:@"disconnect"]?2:[command isEqual:@"test-tone"]?3:0;
    unsigned target=args[@"part"]?unsigned(index(args,@"part",17)):1;if(target==0||target>activeParts())throw std::runtime_error("Part outside connected device profile");--target;
    std::vector<uint8_t> patch;
    if([command isEqual:@"banks"]||[command isEqual:@"presets"]||[command isEqual:@"load"]){
@@ -226,7 +225,7 @@ struct HardwareService::Impl {
  }
  void sendMidi(const PatchBytes& bytes){midi->send(bytes);midiActivity.midi(bytes.data(),bytes.size());if(bytes.size()==3&&(bytes[0]&0xf0)==0xb0&&bytes[1]==7)partVolumes[bytes[0]&15]=bytes[2];}
  void replayVolumes(){for(unsigned p=0;p<activeParts();++p)sendMidi({uint8_t(0xb0|p),7,partVolumes[p].load()});}
- void status(std::string message){std::lock_guard<std::mutex> g(stateLock);text=std::move(message);if(log)log<<text<<std::endl;}
+ void status(std::string message){if(activeParts()==4)message="Snow hardware unverified · "+message;std::lock_guard<std::mutex> g(stateLock);text=std::move(message);if(log)log<<text<<std::endl;}
  static OSStatus audio(AudioDeviceID,const AudioTimeStamp*,const AudioBufferList* input,const AudioTimeStamp*,AudioBufferList*,const AudioTimeStamp*,void* ref){
   auto& s=*static_cast<Impl*>(ref);++s.callbacks;
   // This is capture-only. Do not write the DAW's audio output buffers.
@@ -238,8 +237,8 @@ struct HardwareService::Impl {
  void save(NSString* name,const std::vector<uint8_t>& bytes){if(![[NSData dataWithBytes:bytes.data() length:bytes.size()]writeToFile:[directory stringByAppendingPathComponent:name] atomically:YES])throw std::runtime_error("Cannot save hardware snapshot");}
  void pause(unsigned milliseconds){auto end=std::chrono::steady_clock::now()+std::chrono::milliseconds(milliseconds);do{if(live)drainMidi();std::this_thread::sleep_for(std::chrono::milliseconds(2));}while(std::chrono::steady_clock::now()<end);}
  static void emulatorAudio(void* context,const float* samples,unsigned frames){auto& self=*static_cast<Impl*>(context);if(!self.live)return;++self.callbacks;self.usbMeters.push(samples,frames);self.capture.push(samples,frames);for(unsigned c=0;c<6;++c){float peak=self.rawPeak[c];for(unsigned f=0;f<frames;++f)peak=std::max(peak,std::abs(samples[f*6+c]));self.rawPeak[c]=peak;}}
- void connect(bool snowConsent=false){
-  snowSessionConsent=snowConsent;
+ void connect(bool snowOnly=false){
+  snowSessionConsent=false;
   outputReady=false;performanceSuppressed=true;
   status(emulator?"Booting OsTIrus TI emulator…":"Connecting TI · preserving original edit buffers…");
   NSString* base=[NSHomeDirectory() stringByAppendingPathComponent:@"Library/Application Support/VirusTIRework"];
@@ -253,10 +252,13 @@ struct HardwareService::Impl {
    emulatorLibrary=dlopen(path.fileSystemRepresentation,RTLD_NOW|RTLD_LOCAL);if(!emulatorLibrary)throw std::runtime_error(std::string("Emulator runtime unavailable: ")+dlerror());
    auto create=reinterpret_cast<CreateEmulator>(dlsym(emulatorLibrary,"vtrCreateEmulator"));if(!create)throw std::runtime_error("Emulator runtime entrypoint absent");
    char error[1024]{};midi.reset(create(emulatorROM.c_str(),emulatorAudio,this,error,sizeof(error)));if(!midi)throw std::runtime_error(error);
-  }else{device=findDevice(model,snowConsent);supportedParts=partCount(model);midi=std::make_unique<HardwareMidi>(model==DeviceModel::snow4);}
+  }else{device=findDevice(model,snowOnly);supportedParts=partCount(model);midi=std::make_unique<HardwareMidi>(model==DeviceModel::snow4);}
+  // The ordinary Connect TI action is sufficient to start a Snow session.
+  // Preserve its record for the helper and enforce all Snow preflight checks.
+  snowSessionConsent=model==DeviceModel::snow4;
   supportedParts=partCount(model);
   {std::lock_guard<std::mutex> g(stateLock);if(model==DeviceModel::snow4)normalizeSnowPlaybackProject(staged);else normalizeProject(staged,model);} // Reject cross-model projects before device commands.
-  auto before=captureSnapshot(*midi,model,[&](std::string name,const auto& bytes){save(@(name.c_str()),bytes);},[&]{if(stop)throw std::runtime_error("Shutdown during snapshot");},snowConsent);
+  auto before=captureSnapshot(*midi,model,[&](std::string name,const auto& bytes){save(@(name.c_str()),bytes);},[&]{if(stop)throw std::runtime_error("Shutdown during snapshot");},snowSessionConsent.load());
   original=before.project;single=before.single;multi=before.project.multi;
   if(!emulator){auto helper=[resources() stringByAppendingPathComponent:@"Helpers/virus-ti-restoration-helper"];restoration.arm(helper.fileSystemRepresentation,directory.fileSystemRepresentation,static_cast<HardwareMidi*>(midi.get())->registryID(),deviceLease.descriptor());}
   if(stop)throw std::runtime_error("Shutdown before connection changes");

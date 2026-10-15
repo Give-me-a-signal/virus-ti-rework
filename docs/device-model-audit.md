@@ -3,8 +3,10 @@
 ## Scope and result
 
 This audit records the detection-only change and its sixteen-part baseline.
-The separate [guarded four-part follow-up](snow-four-part-recall.md) adds offline
-data handling; it does not enable Snow hardware connection.
+The consolidated [four-part follow-up](snow-four-part-recall.md) now enables the
+ordinary Connect TI action for Snow in PR #9, with model-specific preflight and
+recovery checks. The detection-only refusal described below is historical;
+Snow remains unverified on physical hardware.
 
 [Issue #8](https://github.com/Give-me-a-signal/virus-ti-rework/issues/8) reports
 `Virus TI Snow` in macOS Audio, while Rework says USB audio is absent. The
@@ -20,7 +22,7 @@ device/port matches, and gives actionable missing-MIDI diagnostics.
 The historical hardware bench also uses the shared selector and records the
 actual device name instead of relabelling every device `Virus TI`.
 
-**Snow remains unverified and connection is disabled.** Recognition does not
+**Historical detection-only behavior:** Snow was unverified and blocked. Recognition did not
 enable playback: our snapshot, part-write, project-recall and restoration paths
 assume sixteen parts. Snow has four. Snow is rejected during audio selection,
 before opening MIDI, creating capture callbacks or sending device commands.

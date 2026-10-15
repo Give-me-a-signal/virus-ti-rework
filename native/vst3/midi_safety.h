@@ -23,4 +23,8 @@ inline void validateSnowTestMidi(const std::vector<uint8_t>& data){
  if((cmd==0x70||cmd==0x71||cmd==0x6e||cmd==0x6f||cmd==0x72)&&data[7]>=4)throw std::runtime_error("Snow control outside four parts");
  if(cmd==0x72&&(data[8]!=41||(data[9]!=10&&data[9]!=13)))throw std::runtime_error("Snow test supports USB1/2 stereo routing only");
 }
+inline void validateDeviceMidi(const std::vector<uint8_t>& data,bool snow){
+ // Model restrictions apply identically in standard and labelled test builds.
+ if(snow)validateSnowTestMidi(data);else validateMidi(data);
+}
 }

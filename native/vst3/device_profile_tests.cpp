@@ -33,7 +33,7 @@ struct Device {
  int failPart=-1;bool badMulti=false;int badSound=-1;bool pendingMulti=false;
  explicit Device(RestoreSnapshot initial):state(std::move(initial)){}
  void send(const PatchBytes& b){
-  validateMidi(b);wire.push_back(b);
+  validateDeviceMidi(b,state.model==DeviceModel::snow4);wire.push_back(b);
   if(pendingMulti)assert(false&&"command sent before multi settling");
   if(b.size()==524){const auto p=b[8];assert(p==64||p<partCount(state.model));written.push_back(p);if(int(p)==failPart)throw std::runtime_error("injected part write failure");if(p==64)state.single=b;else state.project.parts[p]=b;}
   else if(b.size()==267){validateMulti(b);state.project.multi=b;pendingMulti=true;}
@@ -49,11 +49,24 @@ int main(){
  assert(partCount(DeviceModel::snow4)==4&&partCount(DeviceModel::ti16)==16);
  requirePart(DeviceModel::snow4,3);rejects([]{requirePart(DeviceModel::snow4,4);},"outside");
  rejects([]{partCount(static_cast<DeviceModel>(99));},"Unknown");
- requireVerifiedProfile(DeviceModel::ti16);rejects([]{requireVerifiedProfile(DeviceModel::snow4);},"unverified");
- if(snowPlaybackTestBuild)requireVerifiedProfile(DeviceModel::snow4,true);else rejects([]{requireVerifiedProfile(DeviceModel::snow4,true);},"unverified");
+ requireSessionProfile(DeviceModel::ti16);rejects([]{requireSessionProfile(DeviceModel::snow4);},"session record");
+ requireSessionProfile(DeviceModel::snow4,true); // Ordinary Connect authorizes this profile in both builds.
+ for(auto name:virus::identity::tiNames){
+  auto family=virus::identity::family(name);
+  assert(virus::identity::selectAudioDevice({{42,family}})==42);
+  auto model=connectionProfile(family);assert(partCount(model)==(family==virus::identity::Family::snow?4:16));
+  requireSessionProfile(model,model==DeviceModel::snow4);
+ }
+ rejects([]{connectionProfile(virus::identity::Family::unknown);},"Unknown");
+ rejects([]{connectionProfile(virus::identity::Family::ti,true);},"Snow device");
  const PatchBytes snowMode{0xf0,0,32,51,1,16,0x73,0,122,1,0xf7};
  rejects([&]{validateMidi(snowMode);},"Blocked");validateMidi(snowMode,true);
  validateSnowTestMidi(snowMode);validateSnowTestMidi({0x93,60,60});
+ validateDeviceMidi(snowMode,true);rejects([&]{validateDeviceMidi(snowMode,false);},"Blocked");
+ validateDeviceMidi({0x93,60,60},true);
+ rejects([]{validateDeviceMidi({0x94,60,60},true);},"four parts");
+ rejects([]{validateDeviceMidi({0xf0,0,32,51,1,16,0x73,0,9,1,0xf7},true);},"Unverified Snow global");
+ rejects([]{validateDeviceMidi({0xf0,0,32,51,1,16,0x73,0,122,3,0xf7},true);},"Unverified Snow global");
  rejects([]{validateSnowTestMidi({0x94,60,60});},"four parts");
  rejects([]{validateSnowTestMidi({0xf0,0,32,51,1,16,0x73,0,9,1,0xf7});},"Unverified Snow global");
  rejects([]{validateSnowTestMidi({0xf0,0,32,51,1,16,0x73,0,122,3,0xf7});},"Unverified Snow global");
@@ -72,17 +85,17 @@ int main(){
   auto original=snapshot(model);Device device{original};std::map<std::string,PatchBytes> files;
   auto captured=captureSnapshot(device,model,[&](auto name,auto bytes){files.emplace(name,bytes);file(root/name,bytes);},[]{});
   assert(captured.model==model&&captured.project.parts==original.project.parts);
-  assert(device.wire.empty()&&device.requested.size()==partCount(model)+1);
+  assert(device.wire.empty()&&device.requested.size()==(partCount(model)+1)*(model==DeviceModel::snow4?2:1));
   assert(files.size()==partCount(model)+3); // sound buffers plus model record
   auto restored=RestoreSnapshot::read(root);assert(restored.project.parts==original.project.parts&&restored.model==model);
   assert(restored.project.multi==original.project.multi&&restored.single==original.single);
   device.state.single=sound(64,99);unsigned saved=0;
-  restoreSnapshot(device,restored,[&](auto,auto){++saved;},[&](auto ms){device.pause(ms);});
+  restoreSnapshot(device,restored,[&](auto,auto){++saved;},[&](auto ms){device.pause(ms);},model==DeviceModel::ti16);
   assert(saved==partCount(model)+2&&device.state.single==original.single);
   assert(device.state.project.multi==original.project.multi&&device.state.project.parts==original.project.parts);
   for(unsigned p:device.written)assert(p==64||p<partCount(model));
   // Failed part writes are reported and do not abandon remaining readbacks.
-  device.failPart=1;saved=0;rejects([&]{restoreSnapshot(device,restored,[&](auto,auto){++saved;},[&](auto ms){device.pause(ms);});},"injected part write");
+  device.failPart=1;saved=0;rejects([&]{restoreSnapshot(device,restored,[&](auto,auto){++saved;},[&](auto ms){device.pause(ms);},model==DeviceModel::ti16);},"injected part write");
   assert(saved==partCount(model)+2);device.failPart=-1;
   // Bad originals fail before notes, mode changes or any write.
   auto corrupt=restored;corrupt.project.parts[0][49]^=1;auto before=device.wire.size();
@@ -99,7 +112,7 @@ int main(){
   assert(device.written.size()==before);device.badMulti=false;
   if(model==DeviceModel::snow4){
 #ifdef RESTORE_HELPER
-   // Even a valid six-buffer manifest must not enable physical Snow recovery.
+   // Recovery still requires a recorded session, irrespective of build label.
    int lease=open((root/"lock").c_str(),O_CREAT|O_RDWR|O_CLOEXEC,0600);assert(lease>=0&&flock(lease,LOCK_EX|LOCK_NB)==0);
    rejects([&]{RestorationGuard guard;guard.arm(RESTORE_HELPER,root,1,lease);},"did not validate");
    std::ifstream status(root/"restoration-status.json");const std::string report(std::istreambuf_iterator<char>(status),{});assert(report.find("unverified")!=std::string::npos);
@@ -108,7 +121,7 @@ int main(){
    auto cross=original.project;cross.parts[4]=sound(4);before=device.wire.size();
    rejects([&]{recallProject(device,cross,model,[](auto){},[](auto,unsigned){return PatchBytes{};});},"outside");assert(before==device.wire.size());
    auto extra=original;extra.project.parts[15]=sound(15);rejects([&]{extra.validate();},"outside");
-   device.badSound=2;rejects([&]{restoreSnapshot(device,original,[](auto,auto){},[&](auto ms){device.pause(ms);});},"Snow part sound mismatch");device.badSound=-1;
+   device.badSound=2;rejects([&]{restoreSnapshot(device,original,[](auto,auto){},[&](auto ms){device.pause(ms);},false);},"Snow part sound mismatch");device.badSound=-1;
    file(root/"before-part4.syx",sound(4));rejects([&]{RestoreSnapshot::read(root);},"inactive");fs::remove(root/"before-part4.syx");
    fs::remove(root/"before-part3.syx");rejects([&]{RestoreSnapshot::read(root);},"Invalid restoration file");file(root/"before-part3.syx",original.project.parts[3]);
    const auto marker=files.at("before-device-profile.txt");fs::remove(root/"before-device-profile.txt");rejects([&]{RestoreSnapshot::read(root);},"Invalid restoration file");file(root/"before-device-profile.txt",marker);
@@ -123,14 +136,13 @@ int main(){
   assert(captured.snowTestConsent&&d.requested.size()==10&&published==8&&d.wire.empty());
   auto read=RestoreSnapshot::read(root);assert(read.snowTestConsent);
   auto legacy=original;legacy.project.parts[2]=sound(2);legacy.project.parts[2][9]=8;auto& b=legacy.project.parts[2];unsigned sum=0;for(size_t i=5;i<265;++i)sum+=b[i];b[265]=sum&127;sum=0;for(size_t i=5;i<522;++i)sum+=b[i];b[522]=sum&127;
-  Device old(legacy);published=0;rejects([&]{captureSnapshot(old,DeviceModel::snow4,[&](auto,auto){++published;},[]{},true);},"Legacy Snow part");assert(published==0&&old.wire.empty());
+  for(bool session:{false,true}){Device old(legacy);published=0;rejects([&]{captureSnapshot(old,DeviceModel::snow4,[&](auto,auto){++published;},[]{},session);},"Legacy Snow part");assert(published==0&&old.wire.empty());}
   rejects([&]{normalizeSnowPlaybackProject(legacy.project);},"Legacy Snow project");
   auto stereo=original.project;for(unsigned p=0;p<4;++p)stereo.multi[185+p]=p%2?13:10;multiChecksum(stereo.multi);normalizeSnowPlaybackProject(stereo);
   stereo.multi[185]=16;multiChecksum(stereo.multi);rejects([&]{normalizeSnowPlaybackProject(stereo);},"USB1/2");
 #ifdef RESTORE_HELPER
   int lease=open((root/"lock").c_str(),O_CREAT|O_RDWR|O_CLOEXEC,0600);assert(lease>=0&&flock(lease,LOCK_EX|LOCK_NB)==0);
-  if(snowPlaybackTestBuild){RestorationGuard guard;guard.arm(RESTORE_HELPER,root,1,lease);guard.complete();}
-  else rejects([&]{RestorationGuard guard;guard.arm(RESTORE_HELPER,root,1,lease);},"did not validate");
+  {RestorationGuard guard;guard.arm(RESTORE_HELPER,root,1,lease);guard.complete();}
   assert(!fs::exists(root/"restoration-helper"));close(lease);
 #endif
  }

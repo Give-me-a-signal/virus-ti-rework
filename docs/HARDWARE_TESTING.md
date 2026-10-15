@@ -30,16 +30,19 @@ backup method. Start with low monitoring volume. Avoid changing the synth's
 controls while a snapshot/save/restore is in progress. Keep the synth connected
 and powered until recovery finishes.
 
-For an untested model, begin with build/scan and read-only discovery. The service
-currently assumes the Desktop's sixteen-part topology; Snow and other variants
-need maintainer confirmation of their descriptors, part count and protocol before
-attempting connection or recall. Mark playback stages not tested where unsuitable.
+For an untested model, begin with build/scan and read-only discovery. Current
+PR #9 builds select four parts for Snow and sixteen for TI/TI2, with model-specific
+preflight and restoration checks. Follow the [Snow instructions](SNOW_TEST_BUILD.md)
+before a bounded playback test. This does not establish compatibility for an
+untested model; mark stages not tested where unsuitable.
 
 ### Read-only diagnostics for Snow and other unverified models
 
 The [model audit](device-model-audit.md) lists discovery aliases and the remaining
-transport restrictions. Snow connection is deliberately disabled in the detection
-fix; do not bypass it or repeatedly retry Connect in an older build.
+transport restrictions. Current PR #9 builds allow Snow through **Connect TI**;
+the older published snow-test.1 uses **Snow test…**. Do not bypass a missing-port,
+USB identity, snapshot, checksum or recovery failure or repeatedly retry an older
+build that reports the Snow audio absent.
 
 No Terminal or driver changes are needed to collect these details:
 

@@ -1,11 +1,13 @@
 # Snow four-part recall — guarded implementation
 
 This follows the [detection audit](device-model-audit.md) and [issue #8](https://github.com/Give-me-a-signal/virus-ti-rework/issues/8).
-**Snow remains unverified and the normal build blocks connection.** Four-part
-data handling has offline and [local firmware-emulator coverage](snow-emulator-validation-2026-10-15.md).
-A separately compiled [playback preview](SNOW_TEST_BUILD.md) permits explicit
-per-session Snow tests after stable current-format originals and helper readiness
-validate. It does not replace the normal beta or establish physical compatibility.
+**Snow remains unverified on physical hardware.** Current PR builds let the
+normal **Connect TI** action select the four-part profile without a separate build
+flag or opt-in button. Four-part data handling has offline and
+[local firmware-emulator coverage](snow-emulator-validation-2026-10-15.md).
+Stable current-format originals and recovery-helper readiness must validate before
+RAM edits. See the [testing instructions](SNOW_TEST_BUILD.md) for the distinction
+between current PR builds and the unchanged published beta/earlier preview.
 
 ## Implemented behavior
 
@@ -26,13 +28,19 @@ validate. It does not replace the normal beta or establish physical compatibilit
 - Share model-bounded manual/helper restoration and preflight. Continue bounded
   readback evidence after a failed part write, then report the error. Snow
   comparisons are strict; TI normalization exceptions do not automatically apply.
-- Normal builds refuse Snow recovery files. The preview helper also requires the
-  explicit test-consent record in a complete validated snapshot. No installed
-  standard-build setting or environment variable bypasses its guard.
+- Both build variants arm Snow recovery from a complete validated snapshot.
+  Connect records the Snow session using the existing sidecar format; the helper
+  refuses a missing/invalid record. This is a recovery integrity check, not an
+  extra user opt-in or a claim of hardware validation. Snow format/stability
+  checks are model-based and cannot be disabled by omitting the session flag.
+- Both variants always use the restricted Snow MIDI validator. Only four parts,
+  Single/Multi modes 0/1, current-format RAM patches and USB1/2 stereo routing are
+  allowed; TI-only globals, mode 3 and inactive channels/buffers remain blocked.
 
 The editor retains its layout and the host retains existing buses/parameters.
-A usable Snow-specific editor/part selector and physical returns still need
-validation when the connection path is ready.
+The editor disables parts 5–16 and marks USB3 unavailable. The host retains its
+existing buses/parameters for compatibility, with the third Snow return silent.
+Physical returns and editor behavior still need testing on a real Snow.
 
 ## Packet evidence and limits
 
@@ -65,19 +73,23 @@ legacy directories, inactive/missing/corrupt parts, fail-before-write preflight,
 settling, failed writes, sound/routing mismatches and ten repeated recalls.
 Every generated command is checked against the existing RAM-only MIDI boundary.
 Portable tests run normally and with ASan/UBSan. The native suite checks that
-the actual helper refuses a valid Snow snapshot before hardware access.
+the actual helper refuses a missing session record, and arms/completes a valid
+Snow snapshot in both build variants without opening hardware. Discovery tests
+select Snow with the ordinary connection path and verify all TI/TI2 aliases still
+select sixteen parts. Every generated Snow test command passes the restricted
+Snow validator, including recall and restoration.
 Processor/controller tests perform ten four-part v3 state round trips with
 constant length, preserved sound/routing and empty inactive slots.
 See the PR for exact build, CI, validator, AU and packaging results.
 
-Before enabling hardware connection:
+Physical hardware acceptance remains outstanding:
 
 1. Collect [read-only diagnostics](HARDWARE_TESTING.md#read-only-diagnostics-for-snow-and-other-unverified-models).
 2. Establish USB/MIDI identity, capture stream, returns and selector 64; capture
    and validate all originals before any RAM write.
 3. Validate mode/USB initialization, routing, part references, flags and recovery.
-   The preview uses declared Snow Multi mode 1 and avoids the TI-only USB global
-   normalization command. Keep normal-build Snow support blocked until validated.
+   Connection uses declared Snow Multi mode 1 and avoids the TI-only USB global
+   normalization command. Keep support marked unverified until tested on hardware.
 4. With an owner and reviewed bounded test build, check reversible edits, ten
    recalls, inactive-channel refusal, manual disconnect and helper recovery with
    full comparisons. No firmware, bank writes or USB resets.

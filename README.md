@@ -123,13 +123,15 @@ untested. Read the [host test report](docs/daw-beta-validation-2026-10-15.md) an
 
 **Snow:** [issue #8](https://github.com/Give-me-a-signal/virus-ti-rework/issues/8) reports
 that the published beta rejects its `Virus TI Snow` audio name. The source change
-documented in the [model audit](docs/device-model-audit.md) recognizes that name,
-but deliberately disables connection. The separate [four-part implementation](docs/snow-four-part-recall.md)
-has offline regression coverage; Snow's physical initialization, routing and
-recovery sequence remain unverified. The separately labelled [Snow playback test](docs/SNOW_TEST_BUILD.md)
-requires explicit opt-in and stable current-format originals. Its [local firmware
-emulation results](docs/snow-emulator-validation-2026-10-15.md) do not establish
-physical Snow support. The normal beta keeps Snow blocked.
+in [PR #9](https://github.com/Give-me-a-signal/virus-ti-rework/pull/9) recognizes
+that name and lets the regular **Connect TI** button select the
+[four-part Snow path](docs/snow-four-part-recall.md) in either build variant.
+It requires stable current-format originals and recovery-helper readiness before
+RAM edits. Snow's physical initialization, routing and recovery remain **unverified**;
+[local firmware-emulation results](docs/snow-emulator-validation-2026-10-15.md)
+do not establish hardware compatibility. See the [Snow testing instructions](docs/SNOW_TEST_BUILD.md).
+The published 0.2.0-beta.1 is unchanged; the earlier snow-test.1 download still uses
+its separate **Snow test…** button. This PR update has not replaced either release.
 The audit also covers TI/TI2 Desktop, Keyboard and Polar discovery names; those
 additional models remain unverified.
 

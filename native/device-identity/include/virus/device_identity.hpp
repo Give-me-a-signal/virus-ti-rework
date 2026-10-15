@@ -42,7 +42,7 @@ inline void requireTransportProduct(unsigned pid){
  if(pid!=validatedProduct)throw std::runtime_error("Unrecognized Virus USB product; connection disabled");
 }
 struct AudioCandidate {uint32_t id;Family model;};
-inline uint32_t selectAudioDevice(const std::vector<AudioCandidate>& devices,bool snowTestConsent=false){
+inline uint32_t selectAudioDevice(const std::vector<AudioCandidate>& devices){
  AudioCandidate found{0,Family::unknown};
  for(auto d:devices)if(d.model!=Family::unknown){
   if(found.id)throw std::runtime_error("Multiple Virus TI devices; connect only one for this test");
@@ -50,7 +50,6 @@ inline uint32_t selectAudioDevice(const std::vector<AudioCandidate>& devices,boo
   found=d;
  }
  if(!found.id)throw std::runtime_error("Virus TI USB audio absent");
- if(found.model==Family::snow&&!snowTestConsent)throw std::runtime_error("Virus TI Snow detected; support is unverified and connection is disabled until explicit Snow test opt-in (issue #8).");
  return found.id;
 }
 }

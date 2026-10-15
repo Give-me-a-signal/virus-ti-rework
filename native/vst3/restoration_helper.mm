@@ -21,7 +21,7 @@ int main(int argc,char** argv){
   std::string directory=argv[1];NSString* root=@(directory.c_str());report=[root stringByAppendingPathComponent:@"restoration-status.json"];
   size_t parsed=0;auto expected=std::stoull(argv[2],&parsed);if(!expected||parsed!=std::string(argv[2]).size())throw std::runtime_error("Invalid USB identity");
   auto original=VirusRework::RestoreSnapshot::read(directory); // immutable private copy before host edits
-  VirusRework::requireVerifiedProfile(original.model,original.snowTestConsent);
+  VirusRework::requireSessionProfile(original.model,original.snowTestConsent);
   status(@"armed");char armed='A';if(write(STDOUT_FILENO,&armed,1)!=1)throw std::runtime_error("Parent readiness pipe closed");
   char command=0;ssize_t count;do{count=read(STDIN_FILENO,&command,1);}while(count<0&&errno==EINTR);close(STDIN_FILENO);
   if(count==1&&command=='D'){status(@"completed-by-plugin");char done='D';write(STDOUT_FILENO,&done,1);return 0;}

@@ -15,7 +15,7 @@ def hashes(root):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('build', type=pathlib.Path)
-    parser.add_argument('--snow-test', action='store_true', help='Unverified opted-in Snow playback preview')
+    parser.add_argument('--snow-test', action='store_true', help='Label/package the unverified Snow playback preview')
     args = parser.parse_args()
     build = args.build.resolve()
     version = '0.2.0-snow-test.1' if args.snow_test else VERSION
@@ -101,8 +101,11 @@ https://github.com/Give-me-a-signal/virus-ti-rework
         (output/'release-validation.json').write_text(json.dumps({
             'scope': 'Snow playback test 1, unverified hardware',
             'physical_snow_tested': False, 'emulator_is_not_usb_validation': True,
-            'standard_build_keeps_snow_blocked': True,
-            'requires_explicit_per_session_consent': True,
+            'standard_build_keeps_snow_blocked': False,
+            'requires_explicit_per_session_consent': False,
+            'snow_connection_action': 'Connect TI',
+            'requires_manual_snow_connection': True,
+            'requires_recovery_session_record': True,
             'requires_current_format_stable_originals': True,
             'firmware_operations': False, 'stored_bank_writes': False,
             'instructions': 'INSTALL.txt',

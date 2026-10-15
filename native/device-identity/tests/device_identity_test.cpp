@@ -20,15 +20,11 @@ int main(){
   assert(midiPort(upper+" USB PLUGIN I/O")==MidiPort::plugin);
   assert(midiPort(std::string(name)+" USB Plugin I/O extra")==MidiPort::none);
   assert(family(std::string(name)+" extra")==Family::unknown);
-  if(expected==Family::ti)assert(selectAudioDevice({{19,expected}})==19);
+  assert(selectAudioDevice({{19,expected}})==19);
  }
- // Snow was formerly incorrectly reported absent. It is now recognized, but
- // must never escape selection into the sixteen-part snapshot/write path.
- rejects([]{selectAudioDevice({{42,family("Virus TI Snow")}});},"Snow detected");
- rejects([]{selectAudioDevice({{42,Family::snow}});},"unverified");
- rejects([]{selectAudioDevice({{42,Family::snow}});},"connection is disabled");
- assert(selectAudioDevice({{42,Family::snow}},true)==42);
- rejects([]{selectAudioDevice({{42,Family::snow},{43,Family::ti}},true);},"Multiple");
+ // Normal Connect must select Snow, without a special build or extra opt-in.
+ assert(selectAudioDevice({{42,family("Virus TI Snow")}})==42);
+ rejects([]{selectAudioDevice({{42,Family::snow},{43,Family::ti}});},"Multiple");
  rejects([]{selectAudioDevice({{1,Family::ti},{2,Family::snow}});},"Multiple");
  rejects([]{selectAudioDevice({{2,Family::snow},{1,Family::ti}});},"Multiple");
  rejects([]{selectAudioDevice({{1,Family::ti},{2,Family::ti}});},"Multiple");

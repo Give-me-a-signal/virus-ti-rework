@@ -30,7 +30,7 @@ public:
  void savePrivate(NSString* dir){if(privateUSB){privateUSB->saveTraffic(dir);if(!privateUSB->readerError().empty())throw std::runtime_error(privateUSB->readerError());}}
  void request(uint8_t command,uint8_t program=0x40){if(command!=0x30&&command!=0x31&&command!=0x35)throw std::runtime_error("Read-request allowlist");send({0xf0,0,0x20,0x33,1,0x10,command,0,program,0xf7});}
  void send(const std::vector<uint8_t>& data){
-  if(snowTest&&VirusRework::snowPlaybackTestBuild)VirusRework::validateSnowTestMidi(data);else VirusRework::validateMidi(data);
+  VirusRework::validateDeviceMidi(data,snowTest);
   if(privateUSB){privateUSB->sendMessage(data);return;}
   std::array<uint8_t,4096> storage{};auto* list=(MIDIPacketList*)storage.data();auto* p=MIDIPacketListInit(list);if(!MIDIPacketListAdd(list,sizeof(storage),p,0,data.size(),data.data()))throw std::runtime_error("MIDI packet too large");check(MIDISend(output,destination,list),"MIDI send");
  }

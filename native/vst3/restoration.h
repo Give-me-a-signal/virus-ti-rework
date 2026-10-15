@@ -15,8 +15,8 @@ struct RestoreSnapshot {
   for(unsigned p=0;p<partCount(model);++p){const auto& bytes=project.parts[p];virus::patches::parse_single(bytes);if(bytes.size()!=524||bytes[7]!=0||bytes[8]!=p)throw std::runtime_error("Restoration part identity mismatch");}
   virus::patches::parse_single(single);if(single.size()!=524||single[7]!=0||single[8]!=64)throw std::runtime_error("Restoration Single identity mismatch");
   validateMulti(project.multi);
-  if(snowTestConsent){
-   if(model!=DeviceModel::snow4)throw std::runtime_error("Snow test consent on another model");
+  if(snowTestConsent&&model!=DeviceModel::snow4)throw std::runtime_error("Snow test consent on another model");
+  if(model==DeviceModel::snow4){
    if(single[9]<12)throw std::runtime_error("Legacy Snow Single format cannot be restored exactly; no RAM writes allowed");
    for(unsigned p=0;p<4;++p)if(project.parts[p][9]<12)throw std::runtime_error("Legacy Snow part format cannot be restored exactly; no RAM writes allowed");
    for(unsigned p=0;p<4;++p)if(project.parts[p][11]||project.parts[p][12])throw std::runtime_error("Snow part has unvalidated original-bank metadata; no RAM writes allowed");
@@ -56,7 +56,7 @@ RestoreSnapshot captureSnapshot(Device& midi,DeviceModel model,Save save,Check c
  check();result.single=midi.single(64);check();result.project.multi=midi.multi();
  for(unsigned p=0;p<partCount(model);++p){check();result.project.parts[p]=midi.single(p);}
  result.validate(); // No snapshot is publishable until every original is valid.
- if(snowTestConsent){
+ if(model==DeviceModel::snow4){
   // Confirm all six originals twice, before publishing or allowing any write.
   check();if(midi.single(64)!=result.single)throw std::runtime_error("Unstable original Snow Single");
   check();if(midi.multi()!=result.project.multi)throw std::runtime_error("Unstable original Snow Multi");

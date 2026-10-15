@@ -13,7 +13,7 @@ int main(int argc,char** argv){@autoreleasepool{
    if(zoom==100){NSString* path=[NSString stringWithFormat:@"%s/%@-%02d.png",argv[2],theme?@"polar":@"dark",page];assert([[bitmap representationUsingType:NSBitmapImageFileTypePNG properties:@{}]writeToFile:path atomically:YES]);}
   }
  }}
- assert(view->testButton.hidden==!snowPlaybackTestBuild);
+ assert(view->testButton.hidden&&view->connectButton.tag==1); // Same Connect TI action in both build variants.
  controller.hardwarePartCount=4;
  for(NSDictionary* n in view->nodes)if([n[@"attrs"][@"Parameter"]isEqual:@"Multi Parameters/Panel Part"]&&[n[@"attrs"][@"OnValue"]integerValue]>=4)assert(![view editable:n]);
  view->selectedPart=15;view->selectedPage=2;

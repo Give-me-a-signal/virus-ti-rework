@@ -1,9 +1,16 @@
-# Virus TI Rework 0.2.0-snow-test.1 — Apple Silicon playback preview
+# Virus TI Rework — unverified Snow playback testing
 
-This is an **unverified Snow hardware test**, built from the combined PR #9.
-It is separate from 0.2.0-beta.1 and is not a stable release. The standard build
-continues to block Snow. Firmware, stored-bank writing and USB resets are blocked.
-No emulator, firmware, factory sounds or Access assets are included.
+Snow is **unverified on physical hardware**. Current PR #9 builds allow the
+regular **Connect TI** action to select Snow's four-part path; a special compile
+flag or second test button is no longer required. The test-build flag controls
+packaging/branding only. Saved Snow projects still require a manual connection;
+scanning, opening the editor and parsing state do not connect.
+
+Published downloads are immutable: **0.2.0-beta.1 remains unchanged**, and the
+earlier **0.2.0-snow-test.1** download still requires its **Snow test…** button and
+confirmation. The connection change is in the PR, not those existing releases.
+Firmware, stored-bank writing and USB resets remain blocked. No emulator,
+firmware, factory sounds or Access assets are included.
 
 ## Install
 
@@ -43,10 +50,11 @@ still uses the normal importer and the owner's own supported installer.
 
 ## Playback test
 
-1. Load Virus TI Rework in a fresh instrument track. Click **Snow test…**, read
-   the warning, then choose Start playback test. Regular Connect TI keeps Snow
-   blocked. Consent is required for each new connection; it is not saved in DAW
-   projects or enabled during scanning.
+1. Load the current PR build in a fresh instrument track. Put Snow in Single
+   mode, then click **Connect TI**. The detected Snow selects four active parts
+   and displays **Snow hardware unverified**. No extra opt-in button is required.
+   If testing the earlier published snow-test.1 ZIP, use **Snow test…** instead.
+   Neither path connects during scanning or editor opening.
 2. Wait for initialization. Before edits, the test reads all four parts plus
    Single/Multi twice, checks identities/checksums/stability, saves private recovery
    data and arms the helper. A failure stops the connection; do not bypass it.
@@ -54,7 +62,8 @@ still uses the normal importer and the owner's own supported installer.
    releases and stuck notes. Parts 5–16 are unavailable. Test USB1/2 only: the host
    retains three buses for project compatibility, but Snow bus 3 is silent.
 4. Save the disposable project. Disconnect and wait for the restoration result.
-   Reopen and explicitly opt into Snow testing again to check sound/routing recall.
+   Reopen and click **Connect TI** again to check sound/routing recall (use
+   **Snow test…** for the earlier snow-test.1 download).
 5. Separately, quit the host normally while connected. Keep the Snow powered and
    connected until the independent helper finishes. Do not deliberately force-quit,
    unplug or power-cycle as a routine test.

@@ -2,9 +2,18 @@
 #include <stdexcept>
 #include <string_view>
 #include <initializer_list>
+#include "../device-identity/include/virus/device_identity.hpp"
 
 namespace VirusRework {
 enum class DeviceModel { ti16, snow4 };
+inline DeviceModel connectionProfile(virus::identity::Family family,bool snowOnly=false){
+ if(family==virus::identity::Family::snow)return DeviceModel::snow4;
+ if(family==virus::identity::Family::ti){
+  if(snowOnly)throw std::runtime_error("Snow test requires a Snow device");
+  return DeviceModel::ti16;
+ }
+ throw std::runtime_error("Unknown device profile");
+}
 #ifdef VTR_SNOW_PLAYBACK_TEST_BUILD
 inline constexpr bool snowPlaybackTestBuild=true;
 #else
@@ -26,10 +35,11 @@ inline DeviceModel parseProfile(std::string_view record){
  for(auto model:{DeviceModel::ti16,DeviceModel::snow4})if(record==profileRecord(model))return model;
  throw std::runtime_error("Invalid recovery device profile");
 }
-// The four-part algorithms are testable offline, but do not establish a Snow
-// initialization/USB/mode contract. Both the service and helper enforce this.
-inline void requireVerifiedProfile(DeviceModel model,bool explicitTestConsent=false){
- if(model==DeviceModel::snow4&&!(snowPlaybackTestBuild&&explicitTestConsent))throw std::runtime_error("Snow four-part support is unverified; use the Snow test build and explicit per-session test opt-in (issue #8)");
+// Connect TI selects the profile explicitly for this session. Recovery must
+// retain that session record; build branding is not a transport permission.
+// Authorization does not establish physical Snow compatibility.
+inline void requireSessionProfile(DeviceModel model,bool snowSession=false){
+ if(model==DeviceModel::snow4&&!snowSession)throw std::runtime_error("Snow recovery requires the connection session record; physical support remains unverified (issue #8)");
  partCount(model);
 }
 }

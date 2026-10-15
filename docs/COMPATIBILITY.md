@@ -33,7 +33,7 @@ Live is not authorized on this test workstation.
 | --- | --- |
 | Apple chips | Different M-series generations; base, Pro, Max and Ultra where available. Record exact model. |
 | macOS | Exact major/point/build versions from macOS 12 upward. Older releases, current updates and beta reports remain distinct. |
-| Virus hardware | Additional TI Desktops; TI Keyboard/Polar; TI2 variants. Snow needs a separate topology assessment before device-write tests. |
+| Virus hardware | Additional TI Desktops; TI Keyboard/Polar; TI2 variants. Snow has a four-part test path in PR #9; physical playback/recall/recovery remain unverified. |
 | Hosts | Native VST3 hosts and versions beyond the recorded baseline, plus regressions on host updates. AUv2 coverage is recorded separately for the downloadable beta; GarageBand remains untested. |
 | Connections | Direct USB versus specific hubs/docks/adapters, different host audio interfaces and block sizes. |
 
@@ -45,9 +45,10 @@ remain explicit; they are useful evidence of a failure, not complete support tes
 | Release/commit not supplied | TI Snow / firmware not supplied | Apple Silicon Mac / model and chip not supplied | Sonoma / point version and build not supplied | Ableton Live 12 / point version not supplied; VST3 | Genesys Logic hub, then direct; same failure | macOS audio reports 48 kHz, six inputs/two outputs; host block not supplied | **Reported failure:** Connect says audio absent although macOS lists `Virus TI Snow`; MIDI device not visible. Playback/recall/restoration not tested. | [Issue #8](https://github.com/Give-me-a-signal/virus-ti-rework/issues/8) |
 
 The [model audit](device-model-audit.md) separates discovery names from transport
-support. The source fix recognizes Snow and reports it as unverified, with
-connection disabled before MIDI/capture/device commands; it does not establish
-Snow playback compatibility. TI/TI2 Keyboard/Polar and TI2 Desktop also remain
+support. Current PR #9 builds recognize Snow and let **Connect TI** use its
+four-part path, while displaying an unverified status. Snapshot/format, ownership,
+MIDI/USB identity and helper-readiness checks remain mandatory before RAM edits.
+There is no new physical Snow compatibility result. TI/TI2 Keyboard/Polar and TI2 Desktop also remain
 unverified on our build.
 
 Use [the testing guide](HARDWARE_TESTING.md) and [issue form](https://github.com/Give-me-a-signal/virus-ti-rework/issues/new?template=hardware-test.yml).
