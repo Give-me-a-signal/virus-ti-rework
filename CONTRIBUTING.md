@@ -47,6 +47,7 @@ python3 tools/check_repository.py
 bash -n setup.sh tools/install_local.sh native/vst3/build_and_test.sh native/vst3/bootstrap_sdk.sh
 python3 -m compileall -q tools native/vst3/generate_catalog.py
 sh native/transport-core/build_and_test.sh
+sh native/device-identity/build_and_test.sh
 ```
 
 On Apple silicon, also run `sh native/clock-sync/build_and_test.sh` for changes

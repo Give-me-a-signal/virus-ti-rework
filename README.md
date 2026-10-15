@@ -121,6 +121,14 @@ validation target; TI2/Snow remain unverified. The packaged beta has bounded smo
 Bitwig, Ableton Live and LiveProfessor on M1 Pro/macOS 26.2. Coverage differs by host; GarageBand remains
 untested. Read the [host test report](docs/daw-beta-validation-2026-10-15.md) and [compatibility matrix](docs/COMPATIBILITY.md).
 
+**Snow:** [issue #8](https://github.com/Give-me-a-signal/virus-ti-rework/issues/8) reports
+that the published beta rejects its `Virus TI Snow` audio name. The source change
+documented in the [model audit](docs/device-model-audit.md) recognizes that name,
+but deliberately disables connection: Snow's four-part recall and recovery path
+is not implemented or hardware-validated. This is not a Snow playback release.
+The audit also covers TI/TI2 Desktop, Keyboard and Polar discovery names; those
+additional models remain unverified.
+
 ### Tested setups
 
 The following checks used the **packaged 0.2.0-beta.1 candidate**, an **Apple M1 Pro**, **macOS 26.2

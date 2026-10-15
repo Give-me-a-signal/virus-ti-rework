@@ -2,6 +2,7 @@
 #import <CoreAudio/CoreAudio.h>
 #include "hardware_service.h"
 #include "capture_fifo.h"
+#include "../device-identity/include/virus/device_identity.hpp"
 #include "local_control.h"
 #include "browser_bank.hpp"
 #include "device_session.h"
@@ -41,11 +42,14 @@ AudioDeviceID findDevice(){
  AudioObjectPropertyAddress a{kAudioHardwarePropertyDevices,kAudioObjectPropertyScopeGlobal,kAudioObjectPropertyElementMain};UInt32 size=0;
  check(AudioObjectGetPropertyDataSize(kAudioObjectSystemObject,&a,0,nullptr,&size),"Enumerate audio");
  std::vector<AudioDeviceID> devices(size/sizeof(AudioDeviceID));check(AudioObjectGetPropertyData(kAudioObjectSystemObject,&a,0,nullptr,&size,devices.data()),"Read audio devices");
- AudioDeviceID found=0;
+ std::vector<virus::identity::AudioCandidate> candidates;
  for(auto d:devices){CFStringRef name=nullptr;size=sizeof(name);a.mSelector=kAudioObjectPropertyName;
-  check(AudioObjectGetPropertyData(d,&a,0,nullptr,&size,&name),"Audio name");bool match=[(__bridge NSString*)name isEqualToString:@"Virus TI"];if(name)CFRelease(name);
-  if(match){if(found)throw std::runtime_error("Multiple Virus TI devices");found=d;}}
- if(!found)throw std::runtime_error("Virus TI USB audio absent");
+  check(AudioObjectGetPropertyData(d,&a,0,nullptr,&size,&name),"Audio name");
+  const char* label=name?[(__bridge NSString*)name UTF8String]:nullptr;
+  auto model=virus::identity::family(label?label:"");if(name)CFRelease(name);
+  candidates.push_back({d,model});}
+ // Reject Snow/ambiguity before opening MIDI, capture callbacks or device I/O.
+ const AudioDeviceID found=virus::identity::selectAudioDevice(candidates);
  a={kAudioDevicePropertyStreams,kAudioDevicePropertyScopeInput,kAudioObjectPropertyElementMain};size=0;check(AudioObjectGetPropertyDataSize(found,&a,0,nullptr,&size),"Capture streams");
  if(size!=sizeof(AudioStreamID))throw std::runtime_error("Expected one TI capture stream");AudioStreamID stream=0;check(AudioObjectGetPropertyData(found,&a,0,nullptr,&size,&stream),"Capture stream");
  a={kAudioStreamPropertyVirtualFormat,kAudioObjectPropertyScopeGlobal,kAudioObjectPropertyElementMain};AudioStreamBasicDescription f{};size=sizeof(f);check(AudioObjectGetPropertyData(stream,&a,0,nullptr,&size,&f),"Capture format");

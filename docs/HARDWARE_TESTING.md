@@ -35,6 +35,33 @@ currently assumes the Desktop's sixteen-part topology; Snow and other variants
 need maintainer confirmation of their descriptors, part count and protocol before
 attempting connection or recall. Mark playback stages not tested where unsuitable.
 
+### Read-only diagnostics for Snow and other unverified models
+
+The [model audit](device-model-audit.md) lists discovery aliases and the remaining
+transport restrictions. Snow connection is deliberately disabled in the detection
+fix; do not bypass it or repeatedly retry Connect in an older build.
+
+No Terminal or driver changes are needed to collect these details:
+
+1. Record the Mac model/chip, macOS version/build, DAW point version, native/Rosetta
+   mode and Rework release version. Record the synth firmware already displayed
+   by the synth; do not update it for this test.
+2. Open **System Information → USB**, select only the Virus device, and record
+   its displayed product/manufacturer name, Vendor ID, Product ID and Version
+   (USB device revision). In **Audio**, record its name, channel counts and rate.
+   Do not infer TI versus TI2 or Snow from Product ID alone.
+3. In **Audio MIDI Setup → Window → Show MIDI Studio**, report the exact Virus
+   device and port names, especially `USB Plugin I/O` and `USB External I/O`.
+   The Audio Devices window is a separate view. Seeing USB audio does not prove
+   that the MIDI driver and its ports are available.
+4. State which MIDI driver is installed and its version, or say unknown/none.
+   Our current transport needs compatible CoreMIDI ports; it does not bundle a
+   native replacement MIDI driver. Report direct USB versus the named hub/dock.
+
+Share only the selected device details or cropped screenshots. Redact serial
+numbers, location IDs, usernames and private paths; do not attach a full system
+report, patch dumps or personal projects.
+
 Stop if a snapshot, checksum, identity or restore error appears. Save a redacted
 error summary and report it; do not bypass validation or repeatedly retry writes.
 No firmware update, stored-bank write, SIP/Gatekeeper disablement, unexpected USB

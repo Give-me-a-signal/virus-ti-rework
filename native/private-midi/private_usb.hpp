@@ -11,6 +11,7 @@
 #include <functional>
 #include <array>
 #include "usb_midi1.hpp"
+#include "../device-identity/include/virus/device_identity.hpp"
 #include "virus/usb_descriptors.hpp"
 
 namespace virus::private_midi {
@@ -50,11 +51,17 @@ public:
  PrivateUSB(){
   io_iterator_t iterator=0;auto match=IOServiceMatching("IOUSBHostInterface");
   if(IOServiceGetMatchingServices(kIOMainPortDefault,match,&iterator)!=KERN_SUCCESS)throw std::runtime_error("USB interface enumeration failed");
-  struct Candidate{io_service_t service;int number;int location;};std::vector<Candidate> candidates;
-  for(io_service_t s;(s=IOIteratorNext(iterator));){try{if(number(s,CFSTR("idVendor"))==0x133e&&number(s,CFSTR("idProduct"))==0x0815&&number(s,CFSTR("bInterfaceClass"))==255&&number(s,CFSTR("bInterfaceSubClass"))==0&&number(s,CFSTR("bInterfaceProtocol"))==0)candidates.push_back({s,number(s,CFSTR("bInterfaceNumber")),number(s,CFSTR("locationID"))});else IOObjectRelease(s);}catch(...){IOObjectRelease(s);}}
+  struct Candidate{io_service_t service;int number;int location;int product;};std::vector<Candidate> candidates;
+  for(io_service_t s;(s=IOIteratorNext(iterator));){try{if(virus::identity::legacyUSB(number(s,CFSTR("idVendor")),number(s,CFSTR("idProduct")))&&number(s,CFSTR("bInterfaceClass"))==255&&number(s,CFSTR("bInterfaceSubClass"))==0&&number(s,CFSTR("bInterfaceProtocol"))==0)candidates.push_back({s,number(s,CFSTR("bInterfaceNumber")),number(s,CFSTR("locationID")),number(s,CFSTR("idProduct"))});else IOObjectRelease(s);}catch(...){IOObjectRelease(s);}}
   IOObjectRelease(iterator);
+  // Recognize both legacy IDs, but do not open an unvalidated transport profile.
+  // Release every registry reference before returning this diagnostic.
+  if(std::any_of(candidates.begin(),candidates.end(),[](auto c){return c.product==virus::identity::otherLegacyProduct;})){
+   for(auto c:candidates)IOObjectRelease(c.service);
+   virus::identity::requireTransportProduct(virus::identity::otherLegacyProduct);
+  }
   std::sort(candidates.begin(),candidates.end(),[](auto a,auto b){return a.number<b.number;});
-  if(candidates.size()!=2||candidates[0].location!=candidates[1].location){for(auto c:candidates)IOObjectRelease(c.service);throw std::runtime_error("Expected exactly two vendor interfaces on one TI Desktop");}
+  if(candidates.size()!=2||candidates[0].location!=candidates[1].location){for(auto c:candidates)IOObjectRelease(c.service);throw std::runtime_error("Expected exactly two vendor interfaces on one Virus TI (16-part transport)");}
   // Legacy CreateHiddenPortInterface explicitly skips the first matching
   // vendor interface and uses the second. Do not claim the public MIDI port.
   auto selected=candidates[1];interfaceNumber=selected.number;IORegistryEntryGetRegistryEntryID(selected.service,&registryID);

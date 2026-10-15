@@ -32,6 +32,10 @@ target_compile_definitions(vst3_processor_tests PRIVATE VIRUS_REWORK_TEST=1)
 target_link_libraries(vst3_processor_tests PRIVATE sdk sdk_hosting "-framework CoreFoundation" "-framework Cocoa")
 enable_testing()
 add_test(NAME vst3_processor_tests COMMAND vst3_processor_tests)
+add_executable(device_identity_tests ../device-identity/tests/device_identity_test.cpp)
+target_include_directories(device_identity_tests PRIVATE ../device-identity/include)
+target_compile_options(device_identity_tests PRIVATE -UNDEBUG)
+add_test(NAME device_identity_tests COMMAND device_identity_tests)
 
 set_target_properties(VirusTIRework PROPERTIES
  MACOSX_BUNDLE_GUI_IDENTIFIER "org.virus-ti-rework.development.vst3"
