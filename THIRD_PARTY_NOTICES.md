@@ -26,6 +26,10 @@ revision in `native/vst3/sdk-lock.json`. The checked revision and its SDK
 submodules carry MIT licences. Retain their licence files in any binary package;
 the setup packaging command copies them into `Contents/Resources/Licenses`.
 The SDK checkout is not vendored in this repository.
+The build generates a local copy of the pinned AU wrapper with a project-owned
+`IComponentHandler2` adaptation forwarding non-parameter dirty state to AU
+ClassInfo property notifications. Upstream copyright headers remain intact;
+`native/vst3/au_wrapper_state.cmake` records the complete adaptation.
 
 ## Separate emulator research
 

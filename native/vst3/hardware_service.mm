@@ -73,7 +73,7 @@ struct HardwareService::Impl {
  std::atomic<int> requested{0};
  std::atomic<bool> leaseHeld{false};
  std::atomic<uint64_t> callbacks{0},invalidCapture{0},notesSent{0};
- std::atomic<uint64_t> stateRevision{0};
+ std::atomic<uint64_t> stateRevision{0}, stateCaptureCount{0};
  std::atomic<bool> apiRecallDirty{false};
  std::thread worker;
  mutable std::mutex stateLock;
@@ -145,6 +145,7 @@ struct HardwareService::Impl {
  std::string api(const std::string& request){
   NSMutableDictionary* result=[NSMutableDictionary dictionary];
   result[@"protocol"]=@1;result[@"pid"]=@(getpid());result[@"ok"]=@YES;
+  result[@"state_revision"]=@(stateRevision.load());result[@"state_capture_count"]=@(stateCaptureCount.load());
   try{
    NSString* command=[NSString stringWithUTF8String:request.c_str()];NSDictionary* args=@{};
    if(!request.empty()&&request.front()=='{'){
@@ -375,6 +376,7 @@ bool HardwareService::loadPreset(const PatchBytes& patch,unsigned part){
 PatchBytes HardwareService::currentPreset(unsigned part)const{if(part>=16)return {};std::lock_guard<std::mutex> g(impl->stateLock);return impl->staged.parts[part].empty()?impl->loaded.parts[part]:impl->staged.parts[part];}
 void HardwareService::stateCallbacks(std::function<std::vector<uint8_t>()> save,std::function<bool(const std::vector<uint8_t>&)> restore){std::lock_guard<std::mutex> g(impl->callbackLock);impl->saveState=std::move(save);impl->restoreState=std::move(restore);}
 bool HardwareService::captureProject(ProjectPatches& patch,bool& reconnect){
+ ++impl->stateCaptureCount;
  if(impl->stop)return false;
  std::lock_guard<std::mutex> serial(impl->snapshotLock);
  auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(120);
