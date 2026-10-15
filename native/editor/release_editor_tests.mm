@@ -3,7 +3,7 @@
 #include <cassert>
 #include <iostream>
 int main(int argc,char** argv){@autoreleasepool{
- assert(argc==3);[NSApplication sharedApplication];[NSApp setActivationPolicy:NSApplicationActivationPolicyProhibited];
+ assert(argc==3);setenv("VTR_EDITOR_TEST_DEFAULTS","1",1);[NSApplication sharedApplication];[NSApp setActivationPolicy:NSApplicationActivationPolicyProhibited];
  Controller controller;assert(controller.initialize(nullptr)==kResultOk);
  VTRNativeEditor* view=[[VTRNativeEditor alloc]initWithController:&controller resources:@(argv[1])];assert(view->model[@"project_owned"]);assert(!view->originalUI);assert(view->nodes.count>200);
  [NSFileManager.defaultManager createDirectoryAtPath:@(argv[2]) withIntermediateDirectories:YES attributes:nil error:nil];

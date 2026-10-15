@@ -1,6 +1,6 @@
 {
   "version": "0.2.0-beta.1",
-  "status": "local hardware and validator checks passed; CI and DAW compatibility checks pending",
+  "status": "local validation and clean GitHub build passed; real DAW and clean-account installation reports pending",
   "recorded_date": "2026-10-15",
   "platform": {
     "macOS": "26.2",
@@ -85,5 +85,10 @@
     "Snow",
     "clean account browser-download/Gatekeeper installation"
   ],
-  "signing": "ad-hoc, not Developer ID signed or notarized"
+  "signing": "ad-hoc, not Developer ID signed or notarized",
+  "ci": {
+    "commit": "09bda01",
+    "macos_build_auval_and_packaging": "passed",
+    "url": "https://github.com/Give-me-a-signal/virus-ti-rework/actions/runs/38716798561"
+  }
 }

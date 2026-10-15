@@ -4,7 +4,7 @@
 
 An independent, open-source community project by **Give Me a Signal** to keep owned Virus TI hardware useful on modern Macs. The hardware makes the sound; this plug-in brings its MIDI control, USB audio returns, patch browsing and project recall into a native DAW.
 
-**Status: downloadable beta in preparation; contributions and hardware test reports are welcome.** Working hardware playback and Bitwig project recall have been demonstrated on one TI Desktop. This is not yet a broadly tested, signed and notarized consumer release, nor a drop-in replacement for every Virus Control feature. New project code is MIT licensed. Dark and Polar are self-contained. The optional Original Access appearance is imported locally by the owner; Access resources are not included in downloads.
+**Status: downloadable beta prepared for review; contributions and hardware test reports are welcome.** Working hardware playback and Bitwig project recall have been demonstrated on one TI Desktop. This is not yet a broadly tested, signed and notarized consumer release, nor a drop-in replacement for every Virus Control feature. New project code is MIT licensed. Dark and Polar are self-contained. The optional Original Access appearance is imported locally by the owner; Access resources are not included in downloads.
 
 ![Virus TI Rework — Modern Dark filter page](docs/screenshots/dark-page-03.png)
 
@@ -176,7 +176,7 @@ Firmware/wavetable decoding and emulator experiments were a parallel research tr
 
 | Check | Recorded result |
 | --- | --- |
-| Current source packaging build | Six project CTest suites passed; official VST3 validator 47/47; arm64 bundle and restoration helper signatures verified |
+| Local beta build | Nine project CTest suites passed; VST3 validator 47/47; strict auval passed; arm64 bundles/helper signatures verified |
 | 48 kHz / 256 hardware matrix | Sixteen-part routing/recall, 48 isolated auditions, simultaneous 48-note chord and two reconnects passed |
 | Host rate adaptation | Physical three-return checks at 44.1 kHz / 64 and 96 kHz / 512 passed; device remained at 48 kHz |
 | Bitwig Studio 5.2.7 | Native save/reopen at 44.1 kHz / 256, 32 isolated auditions, sixteen sounds/multi and all 2,672 saved parameter tuples matched |
@@ -378,7 +378,8 @@ Fresh **14 October 2026** captures from the real native Cocoa editor render path
 Regenerate the gallery after building with:
 
 ```sh
-/usr/bin/python3 tools/capture_gallery.py native/vst3/build-package
+/usr/bin/python3 tools/capture_gallery.py native/vst3/build-beta
+# Add --original after importing your own Original Access appearance.
 ```
 
 ## Packaging and binary releases

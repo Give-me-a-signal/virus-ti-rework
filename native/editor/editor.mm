@@ -104,10 +104,10 @@ NSString* bindingKey(NSString* name,NSInteger part) {return [NSString stringWith
   for(NSButton* button in @[connectButton,disconnectButton,testButton,themeButton]){button.font=[NSFont systemFontOfSize:10 weight:NSFontWeightMedium];button.bezelStyle=NSBezelStyleRounded;}
   uiStyleButton=[[NSPopUpButton alloc]initWithFrame:NSMakeRect(548,486,132,22) pullsDown:NO];[uiStyleButton addItemWithTitle:@"Modern UI"];uiStyleButton.lastItem.tag=0;[uiStyleButton addItemWithTitle:@"Original Access"];uiStyleButton.lastItem.tag=1;[uiStyleButton addItemWithTitle:@"Import Original…"];uiStyleButton.lastItem.tag=2;uiStyleButton.font=[NSFont systemFontOfSize:10];uiStyleButton.target=self;uiStyleButton.action=@selector(changeUIStyle:);uiStyleButton.toolTip=@"Choose the modern editor or the reconstructed original Access artwork";[self addSubview:uiStyleButton];
   NSUserDefaults* appearancePrefs=[[NSUserDefaults alloc]initWithSuiteName:@"org.virus-ti-rework.editor"];
-  originalUI=[[appearancePrefs stringForKey:@"appearance"] isEqual:@"original"];
+  originalUI=!getenv("VTR_EDITOR_TEST_DEFAULTS")&&[[appearancePrefs stringForKey:@"appearance"] isEqual:@"original"];
   if(originalUI){NSDictionary* imported=originalAppearanceModel(originalAppearanceDirectory(),nullptr);if(imported){model=imported;nodes=model[@"nodes"];parameters=model[@"parameters"];conditions=model[@"conditions"];}else originalUI=NO;}
   themeButton.toolTip=@"Switch between Virus Dark and Polar light themes";scaleButton.toolTip=@"Editor scale — the layout stays proportional";
-  darkTheme=![[[NSUserDefaults alloc]initWithSuiteName:@"org.virus-ti-rework.editor"]boolForKey:@"polarTheme"];
+  darkTheme=getenv("VTR_EDITOR_TEST_DEFAULTS")||![[[NSUserDefaults alloc]initWithSuiteName:@"org.virus-ti-rework.editor"]boolForKey:@"polarTheme"];
   selectedPart=0;selectedPage=0;selectedSection=0;selectedUtility=0;dragID=kNoParamId;graphHandle=-1;
   graphEditIDs=[NSMutableSet set];patchNames=[NSMutableDictionary dictionary];
   for(NSDictionary* node in nodes)if(node[@"id"])nodeByID[node[@"id"]]=node;

@@ -66,7 +66,7 @@ jobs:
         run: |
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
             gh release upload "$GITHUB_REF_NAME" release/dist/*.zip release/dist/SHA256SUMS.txt release/native/vst3/build-beta/*.log --clobber
-            gh release edit "$GITHUB_REF_NAME" --draft=false --prerelease --title "Virus TI Rework $GITHUB_REF_NAME" --notes-file docs/BETA_RELEASE.md
+            gh release edit "$GITHUB_REF_NAME" --target "$GITHUB_SHA" --draft=false --prerelease --title "Virus TI Rework $GITHUB_REF_NAME" --notes-file docs/BETA_RELEASE.md
           else
             gh release create "$GITHUB_REF_NAME" release/dist/*.zip release/dist/SHA256SUMS.txt release/native/vst3/build-beta/*.log --prerelease --title "Virus TI Rework $GITHUB_REF_NAME" --notes-file docs/BETA_RELEASE.md --verify-tag
           fi
