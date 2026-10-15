@@ -6,6 +6,9 @@
 #include "browser_bank.hpp"
 #include "device_session.h"
 #include "restoration_guard.h"
+#include "device_lease.h"
+#include "recall_policy.h"
+#include "restoration.h"
 #include <dlfcn.h>
 #include "../private-midi/hardware_midi.hpp"
 #include <sys/file.h>
@@ -68,6 +71,7 @@ struct HardwareService::Impl {
  std::unique_ptr<LocalControl> control;
  std::string snapshotDirectory;
  std::atomic<int> requested{0};
+ std::atomic<bool> leaseHeld{false};
  std::atomic<uint64_t> callbacks{0},invalidCapture{0},notesSent{0};
  std::atomic<uint64_t> stateRevision{0};
  std::atomic<bool> apiRecallDirty{false};
@@ -90,7 +94,7 @@ struct HardwareService::Impl {
  int mutedPart=-1;
  AudioDeviceID device=0;
  AudioDeviceIOProcID proc=nullptr;
- int deviceLock=-1;
+ DeviceLease deviceLock;
  PatchBytes single,multi,pendingPreset;
  ProjectPatches original,loaded,staged;
  bool lastSucceeded=true;
@@ -197,7 +201,7 @@ struct HardwareService::Impl {
    }
   }catch(const std::exception& e){result[@"ok"]=@NO;result[@"error"]=@(e.what());}
   {std::lock_guard<std::mutex> g(stateLock);result[@"status"]=@(text.c_str());result[@"snapshot_directory"]=@(snapshotDirectory.c_str());result[@"preset_name"]=@(presetName.c_str());result[@"last_command_succeeded"]=@(lastSucceeded);}
-  result[@"connected"]=@(live.load());result[@"busy"]=@(busy.load());result[@"completed_request_id"]=@(completed.load());
+  result[@"device_lease_held"]=@(leaseHeld.load());result[@"connected"]=@(live.load());result[@"busy"]=@(busy.load());result[@"completed_request_id"]=@(completed.load());
   result[@"state_recall_pending"]=@(recallPending.load());result[@"state_format"]=@3;result[@"backend"]=emulator?@"emulator":@"hardware";
   {std::lock_guard<std::mutex> g(stateLock);NSMutableArray* parts=[NSMutableArray array];for(unsigned p=0;p<16;++p){auto& bytes=staged.parts[p].empty()?loaded.parts[p]:staged.parts[p];[parts addObject:@{@"part":@(p+1),@"name":bytes.empty()?@"":@(virus::patches::parse_single(bytes).name.c_str()),@"bytes":@(bytes.size())}];}result[@"parts"]=parts;}
   result[@"host_processing"]=@(hostProcessing.load());result[@"host_sample_rate"]=@(rate.load());result[@"device_sample_rate"]=@48000;
@@ -228,7 +232,7 @@ struct HardwareService::Impl {
   status(emulator?"Booting OsTIrus TI emulator…":"Connecting TI · preserving all 16 edit buffers…");
   NSString* base=[NSHomeDirectory() stringByAppendingPathComponent:@"Library/Application Support/VirusTIRework"];
   NSError* error=nil;if(![[NSFileManager defaultManager]createDirectoryAtPath:base withIntermediateDirectories:YES attributes:nil error:&error])throw std::runtime_error("Cannot create snapshot directory");
-  if(!emulator){auto path=[base stringByAppendingPathComponent:@"hardware.lock"];deviceLock=open(path.fileSystemRepresentation,O_CREAT|O_RDWR|O_CLOEXEC,0600);if(deviceLock<0||flock(deviceLock,LOCK_EX|LOCK_NB)!=0)throw std::runtime_error("TI owned by another plug-in or its restoration helper; wait for restoration to finish");}
+  if(!emulator){auto path=[base stringByAppendingPathComponent:@"hardware.lock"];deviceLock.acquire(path.fileSystemRepresentation);leaseHeld=true;}
   directory=[base stringByAppendingPathComponent:NSUUID.UUID.UUIDString];{std::lock_guard<std::mutex> g(stateLock);snapshotDirectory=directory.fileSystemRepresentation;}
   if(![[NSFileManager defaultManager]createDirectoryAtPath:directory withIntermediateDirectories:NO attributes:nil error:&error])throw std::runtime_error("Cannot create session snapshot directory");
   log.open([[directory stringByAppendingPathComponent:@"session.log"]fileSystemRepresentation]);
@@ -241,7 +245,7 @@ struct HardwareService::Impl {
   single=midi->single(64);multi=midi->multi();validateMulti(multi);original.multi=multi;
   save(@"before-single.syx",single);save(@"before-multi.syx",multi);
   for(unsigned p=0;p<16;++p){if(stop)throw std::runtime_error("Shutdown during snapshot");original.parts[p]=midi->single(p);virus::patches::parse_single(original.parts[p]);save([NSString stringWithFormat:@"before-part%u.syx",p],original.parts[p]);}
-  if(!emulator){auto helper=[resources() stringByAppendingPathComponent:@"Helpers/virus-ti-restoration-helper"];restoration.arm(helper.fileSystemRepresentation,directory.fileSystemRepresentation,static_cast<HardwareMidi*>(midi.get())->registryID(),deviceLock);}
+  if(!emulator){auto helper=[resources() stringByAppendingPathComponent:@"Helpers/virus-ti-restoration-helper"];restoration.arm(helper.fileSystemRepresentation,directory.fileSystemRepresentation,static_cast<HardwareMidi*>(midi.get())->registryID(),deviceLock.descriptor());}
   if(stop)throw std::runtime_error("Shutdown before connection changes");
   if(!emulator){
    check(AudioDeviceCreateIOProcID(device,audio,this,&proc),"Create TI capture callback");
@@ -258,8 +262,8 @@ struct HardwareService::Impl {
   ProjectPatches desired;{std::lock_guard<std::mutex> g(stateLock);desired=staged;}
   auto routing=desired.multi.empty()?multi:desired.multi;
   if(desired.multi.empty())for(unsigned p=0;p<16;++p){routing[73+p]=p;routing[89+p]=0;routing[105+p]=127;routing[153+p]=127;routing[169+p]=127;routing[185+p]=10;routing[249+p]|=1;}
-  multiChecksum(routing);sendMidi(routing);pause(100);
-  auto actualMulti=midi->multi();validateMulti(actualMulti);{std::lock_guard<std::mutex> g(stateLock);loaded.multi=actualMulti;}
+  multiChecksum(routing);sendMidi(routing);pause(multiSettleMs);
+  auto actualMulti=midi->multi();verifyMultiRecall(routing,actualMulti);{std::lock_guard<std::mutex> g(stateLock);loaded.multi=actualMulti;}
   if(!emulator)check(AudioDeviceStart(device,proc),"Start TI capture");live=true;
   for(unsigned p=0;p<16;++p){auto source=desired.parts[p].empty()?(p==0?single:original.parts[p]):desired.parts[p];load(source,p);}
   replayVolumes();{std::lock_guard<std::mutex> g(stateLock);staged={};}
@@ -269,7 +273,7 @@ struct HardwareService::Impl {
   status(emulator?"Emulator connected · 16 parts · MIDI channels 1–16":"Connected · 16 parts · MIDI channels 1–16");
  }
  PatchBytes presetReadback(unsigned part,bool serviceMidi=false){
-  for(unsigned attempt=0;;++attempt){try{return midi->single(part,serviceMidi?std::function<void()>([this]{drainMidi();}):std::function<void()>{});}catch(const std::exception& e){if(std::string(e.what())!="Single request timeout"||attempt==2)throw;pause(200);}}
+  return midi->single(part,serviceMidi?std::function<void()>([this]{drainMidi();}):std::function<void()>{});
  }
  void load(const PatchBytes& source,unsigned part){
   if(stop)throw std::runtime_error("Shutdown during preset recall");
@@ -290,6 +294,7 @@ struct HardwareService::Impl {
  void testTone(unsigned part){auto path=[resources() stringByAppendingPathComponent:@"Hardware/stock-wavetable-probe.syx"];NSData* data=[NSData dataWithContentsOfFile:path];if(data.length!=524)throw std::runtime_error("Stock test patch resource absent");auto* p=static_cast<const uint8_t*>(data.bytes);load(PatchBytes(p,p+524),part);}
  void route(unsigned part,uint8_t output){sendMidi({0xf0,0,0x20,0x33,1,16,0x72,uint8_t(part),41,output,0xf7});auto current=midi->multi();validateMulti(current);if(current[185+part]!=output)throw std::runtime_error("Part routing verification failed");std::lock_guard<std::mutex> g(stateLock);loaded.multi=current;}
  void drainMidi(){
+  if(!outputReady.load())return; // discard this generation at transaction boundaries
   virus::bridge::MidiMessage event;unsigned budget=2048;
   while(budget--&&bridge.serviceTakeMidi(event)){
    auto statusByte=event.bytes[0]&0xf0;
@@ -320,26 +325,17 @@ struct HardwareService::Impl {
    if(midi&&directory)attempt([&]{midi->saveTraffic(directory.fileSystemRepresentation);});midi.reset();dirty=false;
    // The helper retains the shared lease. Closing our descriptor must NOT
    // explicitly unlock it; no new owner may enter before readback completes.
-   if(deviceLock>=0){close(deviceLock);deviceLock=-1;}
+   deviceLock.close();leaseHeld=false;
    restoration.handoff();usbMeters.clear();midiActivity.clear();status("Host closing · automatic RAM restoration in progress");log.close();return;
   }
   if(midi&&dirty){
-   for(int c=0;c<16;++c){attempt([&]{sendMidi({uint8_t(0xb0|c),64,0});});attempt([&]{sendMidi({uint8_t(0xb0|c),123,0});});}
-   // Normalize to the standard two-return configuration on exit. The legacy
-   // protocol does not expose a verified readback of the previous USB setting.
-   if(!emulator)attempt([&]{sendMidi({0xf0,0,0x20,0x33,1,16,0x73,0,9,0,0xf7});});
-   attempt([&]{sendMidi({0xf0,0,0x20,0x33,1,16,0x73,0,122,0,0xf7});});pause(350);
-   attempt([&]{sendMidi(multi);});
-   for(unsigned p=0;p<16;++p){attempt([&]{sendMidi({0xf0,0,0x20,0x33,1,16,0x72,uint8_t(p),32,multi[41+p],0xf7});});attempt([&]{sendMidi({0xf0,0,0x20,0x33,1,16,0x72,uint8_t(p),33,multi[57+p],0xf7});});}
-   pause(300);for(unsigned p=0;p<16;++p){attempt([&]{sendMidi(original.parts[p]);});pause(100);}
-   for(unsigned p=0;p<16;++p)attempt([&]{auto value=midi->single(p);save([NSString stringWithFormat:@"restored-part%u.syx",p],value);virus::patches::parse_single(value);if(original.parts[p][9]<12){if(virus::patches::parse_single(value).name!=virus::patches::parse_single(original.parts[p]).name||midi->single(p)!=value)throw std::runtime_error("Legacy part restoration unstable");log<<"Restored part "<<p+1<<" with running-firmware format conversion "<<unsigned(original.parts[p][9])<<" to "<<unsigned(value[9])<<std::endl;}else {if(value.size()!=original.parts[p].size())throw std::runtime_error("Restored part size mismatch");for(size_t i=0;i<value.size();++i)if(i!=10&&i!=11&&i!=12&&i!=265&&i!=522&&value[i]!=original.parts[p][i])throw std::runtime_error("Part "+std::to_string(p+1)+" restoration mismatch");}});
-   attempt([&]{auto value=midi->single(64);save(@"restored-single.syx",value);if(value!=single)throw std::runtime_error("Single restoration mismatch");});
-   attempt([&]{auto value=midi->multi();save(@"restored-multi.syx",value);validateMulti(value);if(value.size()!=multi.size())throw std::runtime_error("Multi restoration size mismatch");for(size_t i=0;i<value.size();++i)if(i!=10&&i!=265&&value[i]!=multi[i])throw std::runtime_error("Multi sound/routing restoration mismatch");if(value[10]!=multi[10])log<<"Restored multi sound/routing; firmware normalized management flags "<<unsigned(multi[10])<<" -> "<<unsigned(value[10])<<std::endl;});
+   RestoreSnapshot before{original,single};
+   attempt([&]{restoreSnapshot(*midi,before,[&](const std::string& name,const PatchBytes& value){save(@(name.c_str()),value);},[&](unsigned ms){pause(ms);});});
   }
   usbMeters.clear();midiActivity.clear();
   dirty=false;if(midi&&directory)attempt([&]{midi->saveTraffic(directory.fileSystemRepresentation);});midi.reset();if(emulatorLibrary){dlclose(emulatorLibrary);emulatorLibrary=nullptr;}
   if(restoration.armed()){if(errors.empty())attempt([&]{restoration.complete();});else restoration.handoff();}
-  if(deviceLock>=0){close(deviceLock);deviceLock=-1;}
+  deviceLock.close();leaseHeld=false;
   status(errors.empty()?(hadHardwareState?"Disconnected · All 16 edit buffers restored · Single mode sent":"Disconnected · No device state changed"):"Disconnected · Restore needs attention: "+errors);log.close();
  }
  void run(){@autoreleasepool{
@@ -349,7 +345,13 @@ struct HardwareService::Impl {
    if(op==1&&!live)connect();else if(op==2||op==8)disconnect(stop.load());else if(op==3)testTone(pendingPart);else if(op==4)load(pendingPreset,pendingPart);
    else if(op==5)snapshot();else if(op==6){sendMidi(pendingPreset);++notesSent;}
    else if(op==9)route(pendingPart,pendingPreset.at(0));
-   else if(op==7){if(!live)connect();else{ProjectPatches desired;{std::lock_guard<std::mutex> g(stateLock);desired=staged;}if(!desired.multi.empty()){sendMidi(desired.multi);pause(100);auto m=midi->multi();validateMulti(m);std::lock_guard<std::mutex> g(stateLock);loaded.multi=m;}for(unsigned p=0;p<16;++p)if(!desired.parts[p].empty())load(desired.parts[p],p);replayVolumes();std::lock_guard<std::mutex> g(stateLock);staged={};}}
+   else if(op==7){if(!live)connect();else{outputReady=false;bridge.serviceDisconnect();
+    for(unsigned p=0;p<16;++p){sendMidi({uint8_t(0xb0|p),64,0});sendMidi({uint8_t(0xb0|p),123,0});}
+    ProjectPatches desired;{std::lock_guard<std::mutex> g(stateLock);desired=staged;}
+    if(!desired.multi.empty()){sendMidi(desired.multi);pause(multiSettleMs);auto m=midi->multi();verifyMultiRecall(desired.multi,m);std::lock_guard<std::mutex> g(stateLock);loaded.multi=m;}
+    for(unsigned p=0;p<16;++p)if(!desired.parts[p].empty())load(desired.parts[p],p);
+    replayVolumes();{std::lock_guard<std::mutex> g(stateLock);staged={};}outputReady=true;
+   }}
 
    if(op){std::lock_guard<std::mutex> g(stateLock);lastSucceeded=text.find("needs attention")==std::string::npos;}
    if(op==1||op==2||op==3||op==4||op==9||(op==6&&!pendingPreset.empty()&&(pendingPreset[0]&0xf0)==0xb0))++stateRevision;

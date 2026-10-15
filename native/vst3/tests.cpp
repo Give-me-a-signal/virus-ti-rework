@@ -224,6 +224,12 @@ int main() {
  auto multi=std::vector<uint8_t>(267,0);multi[0]=0xf0;multi[2]=0x20;multi[3]=0x33;multi[4]=1;multi[5]=16;multi[6]=17;multi[8]=127;multi.back()=0xf7;multiChecksum(multi);blob(multi);
  MemoryStream sixteenInput(sixteen.data(),sixteen.size());CHECK(restored.setState(&sixteenInput)==kResultOk);
  MemoryStream sixteenSaved;CHECK(restored.getState(&sixteenSaved)==kResultOk);CHECK(sixteenSaved.getSize()==40871);
+ for(unsigned cycle=0;cycle<20;++cycle){
+  sixteenSaved.seek(0,IBStream::kIBSeekSet,nullptr);CHECK(restored.setState(&sixteenSaved)==kResultOk);
+  MemoryStream again;CHECK(restored.getState(&again)==kResultOk);CHECK(again.getSize()==sixteenSaved.getSize());
+  CHECK(std::memcmp(again.getData(),sixteenSaved.getData(),again.getSize())==0);
+ }
+
  sixteenSaved.seek(0,IBStream::kIBSeekSet,nullptr);CHECK(c.setComponentState(&sixteenSaved)==kResultOk);
  for(unsigned part=0;part<16;++part)CHECK(c.hardwarePatches.parts[part]==expected.parts[part]);
  for(size_t size=12+2672*12;size<sixteen.size();++size){MemoryStream truncated(sixteen.data(),size);CHECK(restored.setState(&truncated)==kResultFalse);}

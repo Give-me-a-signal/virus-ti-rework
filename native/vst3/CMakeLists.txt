@@ -159,3 +159,8 @@ set_source_files_properties(../editor/graph_tests.mm PROPERTIES COMPILE_FLAGS "-
 target_compile_options(graph_tests PRIVATE -UNDEBUG)
 target_link_libraries(graph_tests PRIVATE "-framework Cocoa")
 add_test(NAME graph_tests COMMAND graph_tests)
+
+add_executable(recall_policy_tests recall_policy_tests.cpp)
+target_include_directories(recall_policy_tests PRIVATE ../editor)
+target_compile_options(recall_policy_tests PRIVATE -UNDEBUG)
+add_test(NAME recall_policy_tests COMMAND recall_policy_tests)
