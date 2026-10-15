@@ -20,15 +20,15 @@ by default until its hardware acceptance tests pass.
 | Check | Result and scope |
 | --- | --- |
 | RAM project recall | **Pass**, actual VST3 bundle at `bfc72a3`, 48 kHz/256 frames, immediate timing. Ten cycles of a reversible supported cutoff edit followed by whole-project restore. All sixteen sound payloads and multi routing matched after every cycle, using the existing documented normalization exceptions. |
-| Competing format | **Pass**, AU Connect refused while VST3 owned the physical TI. Losing AU had zero capture callbacks, zero MIDI sends and no snapshot directory. This does not yet establish continuity during a sounding timing sequence. |
+| Competing format | **Pass**, AU Connect refused while VST3 owned the physical TI. Losing AU had zero capture callbacks, zero MIDI sends and no snapshot directory. Later sounding and helper-handoff contention checks also passed (below). |
 | Manual disconnect | **Pass**. Independent file comparison found all eighteen original edit buffers byte-identical after restoration. |
 | Normal host exit | **Pass**. Fresh connection, normal host shutdown and helper restoration; all eighteen original edit buffers byte-identical. |
 | Capture health during recall run | **Pass**, no additional capture errors, FIFO underruns or overruns. |
 | Repeated hardware state saves | **Pass**, all ten recalled project-state files byte-identical to the 40,871-byte baseline; no appended records or size growth. This does not complete the separate hardware-to-UI parameter mapping work. |
 | Protocol audit | **Pass** for manual and helper recovery traffic: only the restricted known read, edit-buffer, note/control and USB-mode messages. No stored-bank writes, firmware transfer or USB resets. |
-| Offline processor/editor/capture/recovery/ownership suites | **Pass**, 15/15 at `351104c`; actual-bundle scan and repeated refused-connection tests included. |
-| Steinberg validator | **Pass**, 47/47 at `aa8e8f8`; no explicit Connect. |
-| Address/undefined sanitizers | **Pass**, capture, recall-policy and timing suites. |
+| Offline processor/editor/capture/recovery/ownership suites | **Pass**, 15/15 at `5f6fc6a`; actual-bundle scan and repeated refused-connection tests included. |
+| Steinberg validator | **Pass**, 47/47 at `565fca5`; no explicit Connect. |
+| Address/undefined sanitizers | **Pass**, capture, recall-policy and timing suites; processor ASan/UBSan at `565fca5` includes the exhausted-FIFO fallback regression. |
 | Recording analyzer | **Pass** on synthetic references, including wrong latency, missing/extra onsets, jitter, drift and each return. This validates the analyzer, not device timing. |
 | First VST3 timing measurement | **Pass**, 48 kHz/256, return 1; 256 onsets, mean error −0.0002 ms, jitter SD 0.0026 ms, drift −0.03 ppm. |
 | First AU timing measurement | **Pass**, 48 kHz/256, return 2; 256 onsets, mean error −0.0252 ms, jitter SD 0.0469 ms, drift 0.18 ppm. Competing VST3 refused during playback, with no missing onsets or new capture errors. |
@@ -75,9 +75,30 @@ FIFO regression exercises the actual service render/cancellation path without
 opening hardware. This fixes false synchronization status; it does **not** claim
 to fix the underlying underrun or turn that failed recording into a pass.
 
-Current-build Logic/Bitwig save/reopen and a repeated timing matrix after the
-underrun investigation remain pending. The installed release bundles are
-unchanged; verified backups were prepared for later disposable DAW tests.
+At `565fca5`, a further 48 kHz/256 immediate VST3 sequence recorded all 256
+onsets with a silent release tail and no additional capture errors, underruns or
+overruns. An AU contender was refused both during playback and while the helper
+retained its inherited lease after normal owner exit. A read-only lock probe
+confirmed that the latter attempt occurred during recovery. The loser produced
+zero capture callbacks, MIDI sends or snapshots; all eighteen restored buffers
+matched the first pre-test capture byte-for-byte. Immediate delivery did not meet
+the synchronized timing thresholds (mean 12.44 ms, jitter SD 2.07 ms, drift
+61 ppm); this is a playback/recovery pass only.
+
+Logic 12.4 AU at 48 kHz/128 frames rendered all sixteen fixture notes in a
+real-time bounce and restored the original eighteen buffers after normal exits.
+**Live Logic save/reopen has not passed.** Offline staged-state saving works with
+the new AU notification adapter, but a connected save retained earlier project
+state. See [the AU state investigation](au-state-validation-2026-10-15.md).
+The adapter passes a negative/positive synthetic notification regression, ten
+AU state round trips, CRC rejection and strict `auval`; those do not establish
+live DAW recall. Bitwig 5.2.7 loads the current VST3 dormantly with zero MIDI or
+capture activity; its note-clip/save/reopen check is pending GUI access.
+A repeated timing matrix after the underrun investigation also remains pending.
+
+Verified backups protected the temporary DAW installation. The original AU has
+been restored and every manifest hash checked; the VST3 candidate is temporary
+until its Bitwig smoke check and normal cleanup finish.
 
 The target is no missing/extra notes or new capture errors, corrected mean error
 within 1 ms, jitter standard deviation within 0.5 ms and drift within 10 ppm.

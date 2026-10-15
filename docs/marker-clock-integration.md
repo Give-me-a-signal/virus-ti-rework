@@ -4,6 +4,10 @@ This is a **draft implementation**, not a validated timing release. Normal
 plug-in operation retains immediate MIDI delivery. The experimental host must
 explicitly set `VTR_ENABLE_MARKER_TIMING=1`; do not set that on a production DAW.
 These build targets do not install plug-ins automatically or replace the published beta.
+Hardware acceptance currently fails one AU case (48 kHz/512 frames, three FIFO
+underruns and one missing recorded onset). See
+[the validation report](ownership-timing-validation-2026-10-15.md). The later fault
+guard corrects false locked status, not the underlying underrun.
 
 For disposable Logic/Bitwig tests, a separate build directory may explicitly set
 `-DVTR_TIMING_DAW_TEST_BUILD=ON`. This opts only those test bundles into timing
