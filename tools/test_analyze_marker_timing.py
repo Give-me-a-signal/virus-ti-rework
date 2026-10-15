@@ -13,7 +13,7 @@ class RecordingAnalysisTests(unittest.TestCase):
 
     def measure(self, offsets=None, count=None, bus=1, latency=None):
         count = self.count if count is None else count
-        samples = array.array('f', [0]) * ((self.first + (count + 1) * 1000) * 6)
+        samples = array.array('f', [0]) * ((self.first + (count + 6) * 1000) * 6)
         for i in range(count):
             start = self.first + self.latency + i * 1000 + (offsets(i) if offsets else 0)
             for f in range(start, start + 80):

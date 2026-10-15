@@ -15,6 +15,7 @@ import time
 from ti_control import discover, request
 from test_recall_ownership_hardware import wait, verify_restore
 from analyze_marker_timing import analyze
+from audit_ti_midi_capture import audit
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)
@@ -26,6 +27,7 @@ def main():
     p.add_argument('--block', type=int, choices=[64, 256, 512], required=True)
     p.add_argument('--bus', type=int, choices=[1, 2, 3], required=True)
     p.add_argument('--output', type=Path, required=True)
+    p.add_argument('--competitor-bundle', type=Path, help='Opposite format; verify refusal during sounding playback')
     args = p.parse_args(); out = args.output.resolve(); out.mkdir(parents=True, exist_ok=False)
     patch = args.patch.read_bytes()
     assert len(patch) == 524 and patch[7] == 0 and patch[8] < 16, 'Require a captured part edit buffer'
@@ -35,7 +37,7 @@ def main():
     env = os.environ.copy(); env['VTR_ENABLE_MARKER_TIMING'] = '1'
     log = logpath.open('w'); child = subprocess.Popen([str(args.host.resolve()), args.format, str(args.bundle.resolve()),
         str(recording), str(trigger), str(args.rate), str(args.block), '300'], stdout=log, stderr=log, env=env)
-    session = None
+    session = None; competitor = None; competitor_log = None
     try:
         deadline = time.monotonic() + 15; endpoint = None
         while time.monotonic() < deadline:
@@ -50,7 +52,34 @@ def main():
         # Patch upload is a potentially long SysEx operation. Do not send any
         # performance events until it has finished and the stream is stable.
         time.sleep(1); before = request(endpoint, 'status'); report['before'] = before; persist()
-        trigger.touch(); time.sleep(35)
+        trigger.touch(); sequence_deadline = time.monotonic() + 35
+        if args.competitor_bundle:
+            time.sleep(4)  # The finite sequence is sounding now.
+            kind = 'au' if args.format == 'vst3' else 'vst3'
+            competitor_log = (out / 'competitor.log').open('w')
+            competitor = subprocess.Popen([str(args.host.resolve()), kind, str(args.competitor_bundle.resolve()),
+                str(out / 'competitor.f32'), str(out / 'never-trigger'), str(args.rate), str(args.block), '30'],
+                stdout=competitor_log, stderr=competitor_log, env=env)
+            deadline = time.monotonic() + 10; other = None
+            while time.monotonic() < deadline:
+                matches = [s for s in discover() if s['pid'] == competitor.pid]
+                if matches: other = matches[0]['socket']; break
+                assert competitor.poll() is None; time.sleep(.1)
+            assert other
+            idle = request(other, 'status')
+            assert not idle['connected'] and not idle['snapshot_directory']
+            denied = request(other, 'connect'); target = denied['request_id']
+            while denied['busy'] or denied['completed_request_id'] < target:
+                assert time.monotonic() < deadline; time.sleep(.1); denied = request(other, 'status')
+            assert not denied['last_command_succeeded'] and not denied['connected'] and not denied['device_lease_held']
+            assert not denied['snapshot_directory'] and denied['lifetime_counters']['capture_callbacks'] == 0
+            assert denied['lifetime_counters']['midi_sent'] == 0
+            still_owner = request(endpoint, 'status')
+            assert still_owner['connected'] and still_owner['device_lease_held']
+            assert still_owner['snapshot_directory'] == str(session)
+            competitor.terminate(); assert competitor.wait(timeout=15) == 0
+            report['sounding_competitor_refused_before_io'] = True; persist()
+        time.sleep(max(0, sequence_deadline - time.monotonic()))
         after = request(endpoint, 'status'); report['after'] = after; persist()
         for counter in ('capture_errors', 'fifo_underruns', 'fifo_overruns'):
             assert after['lifetime_counters'][counter] == before['lifetime_counters'][counter], counter
@@ -61,11 +90,20 @@ def main():
         first = int(re.search(r'FIXTURE_START (\d+)', text)[1])
         latency = before.get('reported_latency_samples', math.ceil((2048 + max(2 * math.ceil(args.block * 48000 / args.rate), 1024) + 32) * args.rate / 48000))
         report['measurement'] = analyze(recording, args.rate, first, latency, args.bus)
-        report['passed'] = report['measurement']['passed']; persist()
-        assert report['passed'], report['measurement']
+        persist()
+        assert report['measurement']['passed'], report['measurement']
     except BaseException as error:
         report['error'] = repr(error); persist(); raise
     finally:
+        if session is None and endpoint is not None and child.poll() is None:
+            try:
+                recovery = request(endpoint, 'status').get('snapshot_directory')
+                if recovery: session = Path(recovery); report['session'] = recovery
+            except (OSError, ValueError, TimeoutError):
+                pass
+        if competitor is not None:
+            if competitor.poll() is None: competitor.terminate()
+            competitor.wait(timeout=20); competitor_log.close()
         if child.poll() is None: child.terminate()
         child.wait(timeout=20); log.close()
         if session:
@@ -75,9 +113,14 @@ def main():
                 if status['state'] in ('restored', 'failed'): break
                 time.sleep(.2)
             report['restoration_status'] = status
-            if status['state'] == 'restored': report['restoration_audit'] = verify_restore(session, True)
-            else: report['passed'] = False
-            persist(); assert status['state'] == 'restored', status
+            try:
+                assert status['state'] == 'restored', status
+                report['restoration_audit'] = verify_restore(session, True)
+                report['owner_protocol_audit'] = audit(session / 'private-out.bin', True)
+                report['passed'] = report.get('measurement', {}).get('passed', False) and not report.get('error')
+            except BaseException as error:
+                report['passed'] = False; report['error'] = repr(error); persist(); raise
+            persist()
     print(json.dumps(report['measurement'], indent=2))
 
 if __name__ == '__main__': main()

@@ -34,13 +34,25 @@ def analyze(path, rate, first_frame, latency, bus=1, count=256):
     result = {'rate': rate, 'bus': bus, 'expected_notes': count, 'detected_onsets': len(onsets),
               'reported_latency_samples': latency, 'threshold_fraction': .02,
               'patch_effects_included': True, 'peak': peak, 'passed': False}
+    # The bench fixture uses a short owner-captured Init patch. Silence after
+    # its release and on the unselected returns catches stuck notes/misrouting;
+    # this is not a general test for arbitrary long-release or effect patches.
+    tail_start = expected[-1] + round(rate * .5)
+    tail_peak = max((abs(v) for i, v in enumerate(data[tail_start * 6:])
+                     if i % 6 in (channel, channel + 1)), default=0)
+    other_peak = max((abs(v) for i, v in enumerate(data)
+                      if i % 6 not in (channel, channel + 1)), default=0)
+    result.update(release_tail_peak=tail_peak, unselected_return_peak=other_peak,
+                  release_tail_observed=len(data) // 6 >= tail_start + round(rate * .1))
     if len(onsets) == count:
         x = [i * .125 for i in range(count)]; xm = statistics.mean(x); ym = statistics.mean(errors)
         slope = sum((a - xm) * (b - ym) for a, b in zip(x, errors)) / sum((a - xm) ** 2 for a in x)
         residual = [e - ym - slope * (t - xm) for t, e in zip(x, errors)]
         result.update(mean_error_ms=ym * 1000, jitter_sd_ms=statistics.pstdev(residual) * 1000,
                       drift_ppm=slope * 1e6, maximum_absolute_error_ms=max(map(abs, errors)) * 1000)
-        result['passed'] = abs(result['mean_error_ms']) <= 1 and result['jitter_sd_ms'] <= .5 and abs(result['drift_ppm']) <= 10
+        result['passed'] = (abs(result['mean_error_ms']) <= 1 and result['jitter_sd_ms'] <= .5
+                            and abs(result['drift_ppm']) <= 10 and tail_peak <= low
+                            and other_peak <= 1e-5 and result['release_tail_observed'])
     return result
 
 def main():

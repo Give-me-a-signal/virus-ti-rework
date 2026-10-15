@@ -172,6 +172,7 @@ target_compile_options(timing_tests PRIVATE -UNDEBUG)
 add_test(NAME timing_tests COMMAND timing_tests)
 
 add_test(NAME timing_capture_audit COMMAND ${Python3_EXECUTABLE} "${VTR_SOURCE_ROOT}/tools/test_timing_audit.py")
+add_test(NAME timing_recording_analysis COMMAND ${Python3_EXECUTABLE} "${VTR_SOURCE_ROOT}/tools/test_analyze_marker_timing.py")
 add_executable(protocol_bench protocol_bench.mm "${SDK_ROOT}/public.sdk/source/vst/hosting/module_mac.mm" "${SDK_ROOT}/public.sdk/source/vst/hosting/plugprovider.cpp")
 set_source_files_properties(protocol_bench.mm "${SDK_ROOT}/public.sdk/source/vst/hosting/module_mac.mm" PROPERTIES COMPILE_FLAGS "-fobjc-arc")
 target_include_directories(protocol_bench PRIVATE "${SDK_ROOT}")
