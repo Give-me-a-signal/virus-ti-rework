@@ -1,5 +1,5 @@
 #pragma once
-#include "catalog.h"
+#include "parameter_registry.h"
 #include "hardware_service.h"
 #include "virus/device_bridge.hpp"
 #include "virus/vst_bridge_interface.hpp"

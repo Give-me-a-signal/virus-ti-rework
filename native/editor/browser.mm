@@ -34,11 +34,11 @@ NSRect paneRect(NSInteger pane){return NSMakeRect(19,pane?243:29,671,178);}
   resourceDirectory=[resources copy];imageCache=[NSMutableDictionary dictionary];onSelection=[handler copy];chosenBank[0]=0;chosenBank[1]=1;chosenCategory=-1;activePane=0;selected[0]=selected[1]=-1;
   NSFileManager* fm=NSFileManager.defaultManager;
   NSArray* paths=[[[fm enumeratorAtPath:directory]allObjects]sortedArrayUsingSelector:@selector(localizedStandardCompare:)];
-  for(NSString* relative in paths){if(![[relative.pathExtension lowercaseString]isEqual:@"mid"])continue;
+  for(NSString* relative in paths){if(![@[@"mid",@"syx"]containsObject:relative.pathExtension.lowercaseString])continue;
    NSString* path=[directory stringByAppendingPathComponent:relative];NSDictionary* attr=[fm attributesOfItemAtPath:path error:nil];
    if(![attr[NSFileType]isEqual:NSFileTypeRegular]||[attr[NSFileSize]unsignedLongLongValue]>16*1024*1024){++rejectedBanks;continue;}
    NSData* data=[NSData dataWithContentsOfFile:path options:NSDataReadingMappedIfSafe error:nil];if(!data){++rejectedBanks;continue;}
-   try{auto bank=virus::patches::parse_midi_bank((const std::uint8_t*)data.bytes,data.length);totalPatches+=bank.patches.size();library.push_back({relative.stringByDeletingPathExtension.UTF8String,std::move(bank)});}catch(const virus::patches::ParseError&){++rejectedBanks;}
+   try{auto bank=[relative.pathExtension.lowercaseString isEqual:@"mid"]?virus::patches::parse_midi_bank((const std::uint8_t*)data.bytes,data.length):virus::patches::parse_sysex_bank((const std::uint8_t*)data.bytes,data.length);totalPatches+=bank.patches.size();library.push_back({relative.stringByDeletingPathExtension.UTF8String,std::move(bank)});}catch(const virus::patches::ParseError&){++rejectedBanks;}
   }
   // Prefer two actual populated libraries initially; the shipped "My Patches"
   // empty template remains selectable and is represented honestly as empty.
@@ -49,6 +49,13 @@ NSRect paneRect(NSInteger pane){return NSMakeRect(19,pane?243:29,671,178);}
   [self rebuild];
  }
  return self;
+}
+- (void)setHardwareBuffers:(NSArray<NSData*>*)buffers {
+ virus::patches::Bank bank;for(NSData* d in buffers)try{auto b=(const uint8_t*)d.bytes;bank.patches.push_back(virus::patches::parse_single(std::vector<uint8_t>(b,b+d.length)));}catch(...){}
+ auto found=std::find_if(library.begin(),library.end(),[](auto& b){return b.title=="Hardware edit buffers";});
+ if(found!=library.end()){totalPatches-=found->bank.patches.size();found->bank=std::move(bank);totalPatches+=found->bank.patches.size();}
+ else if(!bank.patches.empty()){totalPatches+=bank.patches.size();library.insert(library.begin(),{"Hardware edit buffers",std::move(bank)});}
+ [self rebuild];
 }
 - (NSUInteger)bankCount{return library.size();}
 - (NSUInteger)patchCount{return totalPatches;}
@@ -145,6 +152,8 @@ NSRect paneRect(NSInteger pane){return NSMakeRect(19,pane?243:29,671,178);}
  NSData* data=[NSData dataWithContentsOfURL:panel.URL options:0 error:&error];
  try{auto bytes=static_cast<const uint8_t*>(data.bytes);auto bank=[panel.URL.pathExtension.lowercaseString isEqual:@"mid"]?virus::patches::parse_midi_bank(bytes,data.length):virus::patches::parse_sysex_bank(bytes,data.length);
   if(bank.patches.empty())throw virus::patches::ParseError("No supported single presets in file");
+  NSString* store=[NSHomeDirectory() stringByAppendingPathComponent:@"Library/Application Support/VirusTIRework/Patches"];[NSFileManager.defaultManager createDirectoryAtPath:store withIntermediateDirectories:YES attributes:nil error:nil];
+  NSString* saved=[store stringByAppendingPathComponent:panel.URL.lastPathComponent];if([NSFileManager.defaultManager fileExistsAtPath:saved])saved=[store stringByAppendingPathComponent:[NSString stringWithFormat:@"%@-%@.%@",panel.URL.lastPathComponent.stringByDeletingPathExtension,NSUUID.UUID.UUIDString,panel.URL.pathExtension]];if(![data writeToFile:saved options:NSDataWritingAtomic error:&error])throw virus::patches::ParseError("Cannot save imported patch file");
   totalPatches+=bank.patches.size();library.push_back({panel.URL.lastPathComponent.stringByDeletingPathExtension.UTF8String,std::move(bank)});chosenBank[item.tag]=library.size()-1;[self rebuild];
  }catch(const std::exception& e){status=[NSString stringWithFormat:@"Bank rejected: %s",e.what()];[self setNeedsDisplay:YES];}
 }

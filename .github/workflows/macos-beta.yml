@@ -1,0 +1,60 @@
+name: macOS beta binaries
+on:
+  push:
+    branches: [main]
+    tags: ['v0.2.0-beta.*']
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  macos-beta:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Verify clean Apple Silicon build environment
+        run: |
+          test "$(uname -m)" = arm64
+          test ! -d analysis
+          test ! -d "$HOME/Library/Application Support/VirusTIRework"
+          brew install cmake ninja
+      - name: Build resource-free AU, VST3 and setup app
+        run: |
+          bash tools/build_beta.sh
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then test "$GITHUB_REF_NAME" = v0.2.0-beta.1; fi
+      - name: Validate installed AU registration
+        run: |
+          mkdir -p "$HOME/Library/Audio/Plug-Ins/Components"
+          ditto "native/vst3/build-beta/AU/Virus TI Rework.component" "$HOME/Library/Audio/Plug-Ins/Components/Virus TI Rework.component"
+          auval -v aumu VtRw GmAS -strict -qp > native/vst3/build-beta/auval.log 2>&1
+      - name: Upload binaries and validation logs
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: Virus-TI-Rework-macOS-arm64
+          path: |
+            dist/*.zip
+            dist/SHA256SUMS.txt
+            native/vst3/build-beta/validator.log
+            native/vst3/build-beta/auval.log
+          if-no-files-found: error
+  prerelease:
+    if: startsWith(github.ref, 'refs/tags/v0.2.0-beta.')
+    needs: macos-beta
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+      - name: Require reviewed main ancestry
+        run: git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: Virus-TI-Rework-macOS-arm64
+          path: release
+      - name: Publish beta release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" release/dist/*.zip release/dist/SHA256SUMS.txt release/native/vst3/build-beta/*.log --prerelease --title "Virus TI Rework $GITHUB_REF_NAME" --notes-file docs/BETA_RELEASE.md --verify-tag

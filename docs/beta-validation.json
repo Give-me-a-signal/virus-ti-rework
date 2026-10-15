@@ -1,0 +1,77 @@
+{
+  "version": "0.2.0-beta.1",
+  "status": "local hardware and validator checks passed; CI and DAW compatibility checks pending",
+  "recorded_date": "2026-10-15",
+  "platform": {
+    "macOS": "26.2",
+    "build": "25C56",
+    "architecture": "arm64"
+  },
+  "offline": {
+    "project_suites": 8,
+    "passed": 8,
+    "vst3_validator_passed": 47,
+    "vst3_validator_failed": 0,
+    "auval_strict": "passed",
+    "setup_transactions": "passed",
+    "original_appearance_import_and_reimport": "passed"
+  },
+  "hardware": {
+    "model": "TI Desktop",
+    "host_harness": "native API host",
+    "sample_rate": 48000,
+    "block": 256,
+    "three_returns": "passed",
+    "capture_errors": 0,
+    "fifo_overruns": 0,
+    "fifo_underruns": 0,
+    "recall": "16 patches byte-identical; multi matches except volatile byte 10 and checksum",
+    "restoration": "manual disconnect and independent normal-host-exit recovery passed",
+    "additional_rates": [
+      {
+        "rate": 44100,
+        "block": 64,
+        "bus_peaks": [
+          0.027099609375,
+          0.027099609375,
+          0.027099609375
+        ],
+        "counters": {
+          "fifo_overruns": 0,
+          "fifo_underruns": 0,
+          "capture_callbacks": 4421,
+          "capture_errors": 0,
+          "rendered_frames": 350976,
+          "midi_sent": 5
+        },
+        "restoration": "completed-by-plugin"
+      },
+      {
+        "rate": 96000,
+        "block": 512,
+        "bus_peaks": [
+          0.027099609375,
+          0.027099609375,
+          0.027099609375
+        ],
+        "counters": {
+          "fifo_overruns": 0,
+          "fifo_underruns": 0,
+          "capture_callbacks": 4404,
+          "capture_errors": 0,
+          "rendered_frames": 731648,
+          "midi_sent": 5
+        },
+        "restoration": "restored"
+      }
+    ]
+  },
+  "not_tested": [
+    "Logic Pro",
+    "GarageBand",
+    "TI2",
+    "Snow",
+    "clean account browser-download/Gatekeeper installation"
+  ],
+  "signing": "ad-hoc, not Developer ID signed or notarized"
+}

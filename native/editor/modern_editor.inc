@@ -6,6 +6,15 @@
  text(darkTheme?@"D A R K  /  1 6  P A R T S":@"P O L A R  /  1 6  P A R T S",NSMakeRect(15,35,175,10),6.5,p.muted);
  line(NSMakePoint(196,49),NSMakePoint(196,467),p.line,.7);
  for(unsigned part=0;part<16;++part){double y=51+part*26;bool selected=part==selectedPart;box(NSMakeRect(10,y,177,24),selected?p.raised:p.panel,p.line,3);if(selected)box(NSMakeRect(10,y+4,2,16),p.accent,nil,1);}
+ if(model[@"project_owned"]){
+  box(NSMakeRect(207,49,679,416),p.panel,p.line,5);
+  NSArray* titles=@[@"EASY EDIT",@"PATCH BROWSER",@"OSCILLATORS",@"FILTERS & ENVELOPES",@"LFOS",@"MODULATION MATRIX",@"ARPEGGIATOR",@"EFFECTS 1",@"REMOTE",@"COMMON",@"",@"EFFECTS 2",@"CONFIGURATION"];
+  text(titles[std::clamp(selectedPage,0L,12L)],NSMakeRect(219,54,640,20),11,p.text,NO,NSFontWeightSemibold);
+  text(@"Dimmed controls are unavailable. Graphs are illustrative. Hardware produces the audio.",NSMakeRect(219,444,650,13),8,p.muted);
+  if(selectedPage==0)text(@"Connect your TI, choose a part, then open an editor page or import your own patch bank in Browser.",NSMakeRect(230,110,620,80),13,p.text);
+  if(selectedPage==12)text(@"Native arm64 • AU / VST3 • three stereo returns • RAM recall and restoration\nUse Import Original… to optionally add the original Access appearance.",NSMakeRect(230,110,620,90),13,p.text);
+  return;
+ }
  auto panel=[&](double x,double y,double w,double h,NSString* title){box(NSMakeRect(x,y,w,h),p.panel,p.line,5);text(title,NSMakeRect(x+10,y+2,w-20,12),8.5,p.muted,NO,NSFontWeightSemibold);line(NSMakePoint(x+10,y+17),NSMakePoint(x+w-10,y+17),p.line,.5);};
  NSInteger page=selectedSection?selectedUtility==1?12:8:selectedPage;
  switch(page){
@@ -40,10 +49,10 @@
  if([type isEqual:@"NameEdit"]){r.size.width=107;text(patchNames[@(part)]?:@"Init / Offline",r,8.5,p.text,NO,NSFontWeightMedium);return;}
  if([type isEqual:@"VUSlider"]){double activity=controller->hardwareMeters.midiActivity[std::clamp(part,0L,15L)];NSRect track=NSMakeRect(r.origin.x+4,r.origin.y+4,r.size.width-8,4);box(track,p.line,nil,1);box(NSMakeRect(track.origin.x,track.origin.y,track.size.width*activity,track.size.height),p.accent,nil,1);double x=track.origin.x+n*track.size.width;box(NSMakeRect(x-1,r.origin.y+1,2,10),p.text,nil,.5);return;}
  if(Graphs::supports(type)){
-  box(r,p.display,p.line,3);for(int i=1;i<4;i++){line(NSMakePoint(r.origin.x,r.origin.y+r.size.height*i/4),NSMakePoint(NSMaxX(r),r.origin.y+r.size.height*i/4),p.line,.35);}
+  box(r,p.display,p.line,3);[NSGraphicsContext saveGraphicsState];[[NSBezierPath bezierPathWithRect:r]addClip];for(int i=1;i<4;i++){line(NSMakePoint(r.origin.x,r.origin.y+r.size.height*i/4),NSMakePoint(NSMaxX(r),r.origin.y+r.size.height*i/4),p.line,.35);}
   auto g=Graphs::geometry(type,a,r,^double(NSString* parameter){return [self plain:parameter part:part];});
   for(auto& points:g.paths){auto path=[NSBezierPath bezierPath];bool first=true;for(auto pt:points){if(first)[path moveToPoint:pt];else[path lineToPoint:pt];first=false;}[p.accent setStroke];path.lineWidth=1.1;[path stroke];}
-  for(auto& h:g.handles)box(NSMakeRect(h.point.x-2,h.point.y-2,4,4),p.ink,p.accent,1);return;
+  for(auto& h:g.handles)box(NSMakeRect(h.point.x-2,h.point.y-2,4,4),p.ink,p.accent,1);[NSGraphicsContext restoreGraphicsState];return;
  }
  if([type isEqual:@"VerticalKnob"]||[type isEqual:@"HorizontalKnob"]||[type isEqual:@"InverseHorizontalKnob"]){
   if([name hasSuffix:@"/Mode"]){NSArray* modes=@[@"LP",@"HP",@"BP",@"BS",@"AN 1",@"AN 2",@"AN 3",@"AN 4"];text(modes[std::clamp(NSInteger(v),0L,7L)],r,7,p.ink,YES,NSFontWeightSemibold);return;}
@@ -58,7 +67,7 @@
  }
  if([type containsString:@"Knob"]){
   bool hollow=[type isEqual:@"MaskedKnob"];knob(r,n,p,hollow,editable);
-  if(r.origin.x>200&&(!hollow||selectedPage==0||selectedPage==4||selectedPage==11)){text(label(name),NSMakeRect(r.origin.x-4,NSMaxY(r)+1,r.size.width+8,11),7.5,p.muted,YES);}
+  if(r.origin.x>200&&(!hollow||selectedPage==0||selectedPage==4||selectedPage==11)){text(model[@"project_owned"]?[name stringByReplacingOccurrencesOfString:@"/" withString:@"\n"]:label(name),NSMakeRect(r.origin.x-20,NSMaxY(r)+1,r.size.width+40,22),6.5,p.muted,YES);}
   return;
  }
  if([type isEqual:@"HorizontalSlider"]||[type isEqual:@"VerticalSlider"]){
@@ -68,7 +77,7 @@
  }
  if([type containsString:@"Menu"]||[type isEqual:@"TextSlider"]){
   box(NSInsetRect(r,.5,.5),p.display,p.line,3);bool menu=[type containsString:@"Menu"];NSRect tr=NSInsetRect(r,menu?5:2,0);if(menu)tr.size.width-=9;text([self textFor:node value:v],tr,r.size.height>18?9:8,p.ink,YES,NSFontWeightMedium);
-  if(selectedPage==9){NSString* caption=label(name);if([name hasPrefix:@"Soft Knobs/"])caption=[name.lastPathComponent containsString:@"Name"]?@"NAME":@"DESTINATION";if(![name hasPrefix:@"Soft Knobs/"])text(caption,NSMakeRect(r.origin.x,r.origin.y-12,r.size.width,10),7.5,p.muted,YES);}
+  if(selectedPage==9||model[@"project_owned"]){NSString* caption=label(name);if([name hasPrefix:@"Soft Knobs/"])caption=[name.lastPathComponent containsString:@"Name"]?@"NAME":@"DESTINATION";if(![name hasPrefix:@"Soft Knobs/"])text(caption,NSMakeRect(r.origin.x,r.origin.y-12,r.size.width,10),7.5,p.muted,YES);}
   if(menu){double x=NSMaxX(r)-7,y=NSMidY(r);line(NSMakePoint(x-2,y-1),NSMakePoint(x,y+1),p.muted,.8);line(NSMakePoint(x,y+1),NSMakePoint(x+2,y-1),p.muted,.8);}return;
  }
  if([type containsString:@"Button"]){
@@ -93,8 +102,15 @@
  themeButton.title=darkTheme?@"◐  Dark":@"◑  Polar";themeButton.enabled=!originalUI;[uiStyleButton selectItemWithTag:originalUI?1:0];[browser setOriginalAppearance:originalUI];[browser setDarkTheme:darkTheme];[self setNeedsDisplay:YES];
 }
 - (void)changeUIStyle:(NSPopUpButton*)sender {
- // Appearance is a local preference, never a synth edit or project mutation.
- originalUI=sender.selectedTag==1;NSUserDefaults* prefs=[[NSUserDefaults alloc]initWithSuiteName:@"org.virus-ti-rework.editor"];[prefs setBool:originalUI forKey:@"originalUI"];[self applyAppearance];
+ [self finishGraphGesture];if(dragID!=kNoParamId)controller->endEdit(dragID);dragID=kNoParamId;dragging=nil;focused=nil;hovered=nil;
+ NSInteger choice=sender.selectedTag;
+ if(choice==2){chooseOriginalAppearance();choice=0;}
+ NSError* error=nil;NSDictionary* imported=choice==1?originalAppearanceModel(originalAppearanceDirectory(),&error):nil;
+ if(choice==1&&!imported){if(chooseOriginalAppearance())imported=originalAppearanceModel(originalAppearanceDirectory(),&error);}
+ originalUI=imported!=nil;model=imported?:builtinEditorModel();nodes=model[@"nodes"];parameters=model[@"parameters"];conditions=model[@"conditions"];
+ [images removeAllObjects];[nodeByID removeAllObjects];for(NSDictionary* n in nodes)nodeByID[n[@"id"]]=n;
+ [[[NSUserDefaults alloc]initWithSuiteName:@"org.virus-ti-rework.editor"]setObject:originalUI?@"original":darkTheme?@"dark":@"polar" forKey:@"appearance"];
+ [self applyAppearance];
 }
 - (void)changeTheme:(id)sender {
  if(originalUI)return;

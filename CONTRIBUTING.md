@@ -54,9 +54,8 @@ to timing code. The GitHub `offline-core` job checks tracked-file boundaries,
 shell/Python syntax and the portable transport tests with sanitizers. It does
 not prove that the macOS plug-in compiles or that a connected synth works.
 
-For editor, processor, service or packaging changes, build locally with your
-own installer using `bash setup.sh '/path/to/Virus TI Software Suite 5.1.7.00.pkg'`.
-This runs six project suites, the VST3 validator and signature checks. Include
+For editor, processor, service or packaging changes, build locally using `bash tools/build_beta.sh`. No Access package is required.
+This builds AU/VST3 and Setup, runs the project suites, VST3 validator, packaging audit and installation transaction tests. macOS CI also runs `auval`. Optional original-art importer tests require a locally owned installer. Include
 the outcome in the PR. UI changes should include before/after captures and
 checks at more than one scale. Do not label synthetic meter fixtures as live audio.
 

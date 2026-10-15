@@ -266,7 +266,7 @@ tresult PLUGIN_API Controller::getMidiControllerAssignment(int32 bus,int16 chann
 using namespace Steinberg;
 using namespace Steinberg::Vst;
 BEGIN_FACTORY_DEF("Virus TI Rework Project","","")
-DEF_CLASS2(INLINE_UID_FROM_FUID(VirusRework::kProcessorID),PClassInfo::kManyInstances,kVstAudioEffectClass,"Virus TI Rework (Development)",0,"Instrument|External","0.1.0",kVstVersionString,VirusRework::Processor::create)
-DEF_CLASS2(INLINE_UID_FROM_FUID(VirusRework::kControllerID),PClassInfo::kManyInstances,kVstComponentControllerClass,"Virus TI Rework Development Controller",0,"","0.1.0",kVstVersionString,VirusRework::Controller::create)
+DEF_CLASS2(INLINE_UID_FROM_FUID(VirusRework::kProcessorID),PClassInfo::kManyInstances,kVstAudioEffectClass,"Virus TI Rework",0,"Instrument|External","0.2.0-beta.1",kVstVersionString,VirusRework::Processor::create)
+DEF_CLASS2(INLINE_UID_FROM_FUID(VirusRework::kControllerID),PClassInfo::kManyInstances,kVstComponentControllerClass,"Virus TI Rework Controller",0,"","0.2.0-beta.1",kVstVersionString,VirusRework::Controller::create)
 END_FACTORY
 #endif

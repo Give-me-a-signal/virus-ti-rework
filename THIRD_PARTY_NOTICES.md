@@ -11,10 +11,7 @@ project: static reverse engineering informed the protocol and editor behavior.
 Setup reads the owner's **Virus TI Software Suite 5.1.7.00.pkg**, checks its
 SHA-256 and extracts resources without running the installer or vendor code.
 PNG artwork, XML layouts/parameter declarations, factory MIDI banks, display
-waveforms and the derived test patch remain local and ignored by Git. Generated
-`catalog.h`, `browser_mapping.inc` and `graph_waveforms.h` are also ignored.
-Build bundles contain these local resources; do not upload those bundles as
-MIT-only releases. The graph formulas, geometry constants and protocol mappings
+waveforms and the derived test patch remain local and ignored by Git. Legacy generated `catalog.h`, `browser_mapping.inc` and `graph_waveforms.h` remain ignored research inputs. Public beta builds do not compile or bundle them. The compact project parameter registry retains numeric interface compatibility and protocol facts. New layouts, analytic waves and schematic graph geometry are project-authored. Optional imported appearance files stay outside distributed bundles. The graph formulas, geometry constants and protocol mappings
 in the reconstruction are documented in the engineering notes with provenance.
 
 The README screenshots illustrate the reconstructed UI. Original Access artwork
@@ -38,6 +35,12 @@ not part of this hardware repository or its default build. The optional runtime
 loader remains in the source; enabling an external runtime is a separate build
 and licensing decision. The hardware release explicitly disables runtime bundling.
 
-Public binary distribution still requires a resource-distribution decision and
-Developer ID signing/notarization. The public source repository plus owner-supplied
-local resources is the current distribution workflow, not a notarized consumer installer.
+## Apple AudioUnitSDK
+
+The AUv2 wrapper uses Apple's AudioUnitSDK 1.4.0, pinned at
+`bd98b31feff57a15989fcfab4cd86dc63382b1ac`, under Apache-2.0.
+Retain the upstream licence in binary distributions. Steinberg's wrapper is MIT.
+
+Public beta archives contain native project code and dependency notices, not Access
+resources. They are ad-hoc signed and unnotarized; Developer ID signing and
+notarization are planned separately. Optional Access appearance imports remain local.

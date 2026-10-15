@@ -1,9 +1,10 @@
 #include "browser_bank.hpp"
+#include "../vst3/parameter_registry.h"
 #include <algorithm>
 #include <cstring>
 namespace virus::patches {
 namespace {
-#include "browser_mapping.inc"
+
 [[noreturn]] void bad(const char* text){throw ParseError(text);}
 struct Reader {
  const std::uint8_t* p;std::size_t size,pos=0;
@@ -85,10 +86,10 @@ std::vector<Value> Patch::decoded_values() const {
  if((checksum&127)!=sysex[sysex.size()-2])return result;
  if(sysex.size()==524){unsigned first=0;for(std::size_t i=5;i<265;++i)first+=sysex[i];if((first&127)!=sysex[265])return result;}
  const bool ti=sysex.size()==524;
- for(const auto& m:mappings)if(m.ti==ti&&m.index<sysex.size()-2){
-  const int value=sysex[m.index];if(value>=m.minimum&&value<=m.maximum)result.push_back({m.name,value});
+ for(const auto& m:VirusRework::kControls)if(m.patchOffset>=9&&size_t(m.patchOffset)<sysex.size()-2&& (ti||m.patchOffset<265)){
+  const int value=sysex[m.patchOffset];if(value>=m.minimum&&value<=m.maximum)result.push_back({m.name,value});
  }
  return result;
 }
-const char* category_name(unsigned raw) noexcept{return raw<23?category_names[raw]:"Unknown";}
+const char* category_name(unsigned raw) noexcept{static thread_local std::string category;category="Category "+std::to_string(raw);return category.c_str();}
 }

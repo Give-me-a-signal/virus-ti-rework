@@ -1,10 +1,10 @@
 # Virus TI Rework
 
-**Native Apple silicon VST3 integration for the Access Virus TI hardware synthesizer.**
+**Native Apple silicon AU and VST3 integration for the Access Virus TI hardware synthesizer.**
 
 An independent, open-source community project by **Give Me a Signal** to keep owned Virus TI hardware useful on modern Macs. The hardware makes the sound; this plug-in brings its MIDI control, USB audio returns, patch browsing and project recall into a native DAW.
 
-**Status: experimental. Available to build from source; contributions and hardware test reports are welcome.** Working hardware playback and Bitwig project recall have been demonstrated on one TI Desktop. This is not yet a broadly tested, signed and notarized consumer release, nor a drop-in replacement for every Virus Control feature. New project code is MIT licensed. Original Access resources are supplied locally by the owner and are not included in this repository.
+**Status: downloadable beta in preparation; contributions and hardware test reports are welcome.** Working hardware playback and Bitwig project recall have been demonstrated on one TI Desktop. This is not yet a broadly tested, signed and notarized consumer release, nor a drop-in replacement for every Virus Control feature. New project code is MIT licensed. Dark and Polar are self-contained. The optional Original Access appearance is imported locally by the owner; Access resources are not included in downloads.
 
 ![Virus TI Rework — Modern Dark filter page](docs/screenshots/dark-page-03.png)
 
@@ -14,14 +14,14 @@ An independent, open-source community project by **Give Me a Signal** to keep ow
 
 | Area | Implemented and tested scope |
 | --- | --- |
-| Native plug-in | arm64 VST3 processor/controller and Cocoa editor; three stereo output buses and sixteen-channel MIDI input |
+| Native plug-in | arm64 VST3 processor/controller, AUv2 wrapper and Cocoa editor; three stereo output buses and sixteen-channel MIDI input |
 | Real hardware audio | Capture through Apple's existing USB audio/CoreAudio support; six device channels mapped to USB1, USB2 and USB3 |
 | Host sample rates | TI capture stays at 48 kHz; a 64-tap windowed-sinc resampler and FIFO drift correction adapt to the DAW |
 | MIDI and parts | Vendor-specific TI USB MIDI interface, note delivery, supported CC controls, sixteen-part selection and routing |
-| Patch browser | 62 banks / 7,164 checksum-verified shipped patches after local resource import; search, categories, two panes and selected-part recall |
+| Patch browser | Hardware edit buffers and user-imported MIDI/SysEx files; search, categories, two panes and selected-part recall |
 | Project recall | Versioned state contains sixteen RAM patches, RAM multi, routing and 2,672 mapped parameter values; connected projects reconnect when realtime processing starts |
 | Recovery | Original RAM snapshots before changes; verified manual Disconnect; independent recovery helper after plug-in/DAW exit or host crash |
-| Editor | Original-artwork renderer plus Modern Dark and Polar vector appearances, 100–200% scaling, dynamic graphs and host parameter gestures |
+| Editor | Self-contained Modern Dark and Polar vector appearances plus optional imported original artwork, 100–200% scaling, dynamic graphs and host parameter gestures |
 | Metering | Separate note-velocity activity and CC7 volume per part; three actual mixed USB capture peak meters |
 | Local API | Per-user Unix socket and Python control tool; no network listener; hardware connection is explicit except restored connected projects |
 
@@ -29,94 +29,89 @@ The vendor-specific MIDI path is reconstructed in user space. **We do not load t
 
 ## Setup
 
-### Requirements
+### Download the beta
 
-- Apple silicon Mac running macOS, an arm64 VST3 host and a powered Virus TI connected by USB.
-- Your own **Virus TI Software Suite 5.1.7.00.pkg** — [download instructions below](#download-the-original-access-installer). Setup supports the exact installer SHA-256 `3ebcfef395a6c5f1ef2162404228f1fbe571371f7389836f13c55c8a7636ce1d` and rejects other inputs.
-- Apple Command Line Tools, CMake 3.25+, Ninja, Git and Python 3. Setup defaults to `/usr/bin/python3` from the Apple developer tools; `VTR_PYTHON` can select another working interpreter.
+Get the latest **macOS arm64 beta ZIP** from [GitHub Releases](https://github.com/Give-me-a-signal/virus-ti-rework/releases).
+It contains **Virus TI Rework Setup.app**, **Virus TI Rework.vst3** and **Virus TI Rework.component**.
 
-The hardware build targets macOS 12 or later; that deployment target is **not** a compatibility certification. Current development/build checks ran on macOS 26.2, with physical testing on the project's TI Desktop. TI2, Snow, Intel Macs, Windows and other host/OS combinations are not validated releases.
+1. Unzip the download and quit your DAW.
+2. Open **Virus TI Rework Setup.app**, select VST3 and/or Audio Unit, and click **Install / Update**.
+3. Restart your DAW and rescan plug-ins. Load **Virus TI Rework** on an instrument track.
 
-### Download the original Access installer
+No Access installer, build tools or Terminal commands are required for normal operation.
+**Dark is the default**; Polar is available from the editor. The complete page workflow is present, with
+unfinished hardware controls dimmed and disabled. Factory sounds are not bundled: use your hardware's
+current sounds or import your own `.mid`/`.syx` patches from the browser bank menu.
 
-1. Open the **[official Access download link for Virus TI Installer 5.1.7.00 for macOS](https://www.virus.info/download/585)**. Access redirects signed-out visitors to its login page.
-2. Sign in to your Access account. If you need an account, [register with Access and add your Virus hardware](https://www.virus.info/signup), then return to the download link.
-3. If the direct link leaves you on the downloads page, use the **[official Virus TI Software Suite download page](https://www.virus.info/start)**. Under **For macOS 10.7–10.14**, select **Virus TI Installer 5.1.7.00 for macOS**. Choose the macOS download, not either Windows installer.
-4. Locate **Virus TI Software Suite 5.1.7.00.pkg** in the download and keep it for the build command below. Replace the example `/path/to/` with its actual location on your Mac.
+These are **ad-hoc signed, unnotarized beta builds**. macOS may block downloaded software. Use the
+per-app approval offered under **System Settings → Privacy & Security** where available; do not disable
+Gatekeeper or SIP. Report installation blocks with your macOS version. See the ZIP's `INSTALL.txt`.
 
-The **macOS 10.7–10.14** label describes the original Access software; this is still the package required as input to Virus TI Rework. **Do not run the original installer for this setup.** The project's `setup.sh` extracts the required resources locally without installing the legacy plug-in or drivers, and checks the package against the SHA-256 above.
+### Manual installation
 
-Original Access resources remain subject to their own terms and are not included in this repository. The official download requires your own Access account; this project does not mirror the installer.
+Copy the `.vst3` into `~/Library/Audio/Plug-Ins/VST3/` and the `.component` into
+`~/Library/Audio/Plug-Ins/Components/` using Finder's **Go → Go to Folder**. Create a missing folder if necessary.
+The AU works independently; a separate VST3 installation is optional. Move **Virus TI Rework Development.vst3**
+out of the scan folder before manually installing its replacement. Setup handles that backup automatically.
 
-### AI-assisted setup for non-technical users
+Setup installs for the current user, preserves previous versions in
+`~/Library/Application Support/VirusTIRework/PluginBackups/`, and offers uninstall without deleting your sounds,
+optional appearance resources or recovery evidence.
 
-An AI coding agent with permission to access files and run commands on your Mac can help you build and install the plug-in. A chat-only assistant can explain the steps, but cannot perform the local installation for you.
+### Requirements and verified scope
 
-First, [download the original Access installer](#download-the-original-access-installer) yourself and keep the `.pkg` file. Then copy the following prompt into your preferred coding agent:
+Apple Silicon Mac, macOS 12 deployment target, an AUv2 or arm64 VST3 host, and physical Virus TI hardware.
+A deployment target does not establish compatibility with every OS or host. TI Desktop is the initial hardware
+validation target; TI2/Snow remain unverified. AU validator results and test-host checks do not establish
+Logic/GarageBand compatibility: real host reports are tracked separately. See [compatibility](docs/COMPATIBILITY.md).
 
-```text
-Help me build and install Virus TI Rework from
-https://github.com/Give-me-a-signal/virus-ti-rework on this Mac.
+### Optional Original Access appearance
 
-Read the README, CONTRIBUTING.md and docs/HARDWARE_TESTING.md first.
-Check my Mac, macOS version and DAW against the documented requirements
-and limitations. Explain any missing prerequisites before installing them.
+Choose **Import Original Access Appearance…** in Setup, or **Import Original…** from the editor's appearance
+selector. Select your own **Virus TI Software Suite 5.1.7.00.pkg**. After import, choose **Original Access**.
+Dark and Polar continue to work if import is cancelled, rejected or unavailable. Imported resources are stored
+outside the plug-in bundles and shared by AU/VST3.
 
-Ask me where I saved "Virus TI Software Suite 5.1.7.00.pkg". Use the
-repository's setup script to extract its resources; do not run the original
-Access installer. Build and validate the plug-in, then install it following
-the documented instructions.
-
-Don't disable macOS security protections, update my Virus firmware or write
-stored patch banks. Before connecting to the synth, confirm my exact Virus
-model and follow the testing guide's restrictions for untested hardware.
-
-Help me test in a disposable DAW project and prepare a compatibility report
-with my Mac chip, macOS version, Virus model/firmware, DAW version, plug-in
-commit, USB setup, sample rate and buffer size. Clearly separate what passed,
-failed or wasn't tested. Let me review the report before posting it.
-```
-
-You do not need to understand the code to contribute. Even finding a confusing setup step is useful feedback. An agent can make setup easier, but the plug-in is still experimental and using an agent does not establish compatibility with your hardware or DAW. Use the [hardware testing guide](docs/HARDWARE_TESTING.md) and share reviewed results through [GitHub Issues](https://github.com/Give-me-a-signal/virus-ti-rework/issues).
-
-### Build, validate and install
-
-Install the developer prerequisites if needed (`xcode-select --install`; with an existing Homebrew installation, `brew install cmake ninja`). Then:
-
-```sh
-git clone https://github.com/Give-me-a-signal/virus-ti-rework.git
-cd virus-ti-rework
-bash setup.sh '/path/to/Virus TI Software Suite 5.1.7.00.pkg' --install
-```
-
-Setup expands the package **without running its installer**, reconstructs ignored local resources, fetches the pinned official VST3 SDK, builds arm64 code, runs six project test suites and the Steinberg validator, signs the local bundle ad hoc and verifies its nested helper signature. `--install` copies the result to:
-
-```text
-~/Library/Audio/Plug-Ins/VST3/Virus TI Rework Development.vst3
-```
-
-An existing plug-in is preserved under `~/Library/Application Support/VirusTIRework/PluginBackups/`. No administrator access or system-wide driver installation is needed. Fully quit and reopen the DAW so it loads the new binary. Omit `--install` to build and package without changing the installed plug-in.
-
-The build output is `native/vst3/build-package/VST3/Release/Virus TI Rework Development.vst3`. A checksum-indexed **local-only** ZIP is written to `dist/`; it includes your imported Access resources and is not intended as a public MIT-only binary release. The current build has no Developer ID signature or notarization ticket.
+[Download the original installer from Access](https://www.virus.info/download/585), sign into your Access account,
+and choose **Virus TI Installer 5.1.7.00 for macOS** under **macOS 10.7–10.14** if redirected to the
+[downloads page](https://www.virus.info/start). [Access registration](https://www.virus.info/signup) is available
+for owners who need an account. The old OS label describes the original software, not this plug-in's requirements.
+**Do not run the original installer.** Our importer checks SHA-256
+`3ebcfef395a6c5f1ef2162404228f1fbe571371f7389836f13c55c8a7636ce1d` and extracts appearance resources only.
+Original Access resources retain their own terms and are not included in releases.
 
 ### First hardware session
 
-1. Start with the TI in Single mode and the desired sound selected. Load **Virus TI Rework (Development)** on a DAW instrument track. Keep your normal DAW audio output device.
-2. Open the editor and press **Connect TI**. Connection snapshots the Single buffer, all sixteen part buffers and RAM multi, then configures temporary SEQ operation and three USB returns. Allow initialization to finish.
-3. Send notes on MIDI channel 1 for Part 1. Parts 2–16 use channels 2–16. Route the plug-in's extra stereo outputs in your DAW when using USB2/USB3.
-4. Browse and recall a patch into the selected part, or use supported controls. A local-only control is identified in hover information; not every displayed control currently sends hardware edits.
-5. Save the DAW project with the device connected. A fresh hardware snapshot reads each part serially; keep controls unchanged during the save. On reopening, realtime processing triggers automatic connection and recall.
-6. Use **Disconnect** for an explicit restore. Normal host exit also triggers the separate restoration helper. Keep the synth powered and connected until restoration completes—about 23 seconds in the measured exit tests.
+Start the TI in Single mode, preserve important sounds using your normal backup method, and use a disposable
+DAW project. Press **Connect TI**, wait for snapshots/initialization, then send notes on MIDI channel 1 for Part 1.
+Parts 2–16 use channels 2–16; enable the extra stereo output buses for USB2/USB3. Keep your normal DAW output interface.
+Only one instance across both formats may own the device.
 
-Only one development instance may own the synth at a time. Plug-in scanning does not connect to hardware. Record or bounce **in real time**: offline export does not synthesize the external instrument.
+Save while connected to capture hardware sounds/routing. Reopening a connected project requests recall when
+realtime processing starts. Use **Disconnect** to restore original RAM. Keep the synth powered and connected
+until restoration completes after disconnect or host exit. Firmware updates, stored-bank writes and offline
+hardware rendering are unsupported. Follow the [staged hardware guide](docs/HARDWARE_TESTING.md).
 
-To check recovery after the DAW closes:
+### Building from source / AI-assisted setup
 
-```sh
-/usr/bin/python3 tools/ti_control.py restorations
+Developers can run `bash tools/build_beta.sh` after installing Apple Command Line Tools, CMake 3.25+, Ninja,
+Git and Python 3. This builds AU/VST3 and Setup without an Access package, runs tests and the VST3 validator,
+and creates an audited ZIP in `dist/`. The build fetches pinned Steinberg and Apple SDK revisions.
+
+For help from an AI coding agent, copy:
+
+```text
+Help me install and test Virus TI Rework from
+https://github.com/Give-me-a-signal/virus-ti-rework .
+Read the README and docs/HARDWARE_TESTING.md. Prefer the prebuilt GitHub beta
+and graphical setup app; no Access installer is required for Dark or Polar.
+Check my Apple chip, macOS, DAW and exact Virus model/firmware. Do not disable
+macOS security, update firmware or write stored banks. Use a disposable DAW
+project and follow the untested-model restrictions. Record pass/fail/not-tested
+for installation, scan, playback, routing, recall and restoration. Let me
+review a compatibility report before posting it. If building is necessary,
+use tools/build_beta.sh; explain missing developer prerequisites first.
 ```
-
-Snapshots and recovery logs live under `~/Library/Application Support/VirusTIRework/`. Restore covers documented sound/routing RAM data. Exit requests Single mode and normalizes USB configuration to two returns; it does not claim exact preservation of unknown global settings. Unplugging or replacing the USB device can prevent recovery.
 
 ## How it works
 
@@ -154,9 +149,9 @@ DAW shutdown exposed another issue: a plug-in cannot rely on being allowed to sp
 
 ### Editor reconstruction
 
-The original XML supplied the 907×513 layout, control bindings, conditions and value lists. The original PNGs supplied the optional familiar appearance. REA/Ghidra analysis informed waveform display tables, graph geometry and envelope/filter behavior. A new native Cocoa view implements the interaction and VST3 bindings; it does not execute the old editor.
+The initial reconstruction used the original XML for the 907×513 layout, control bindings, conditions and value lists. The original PNGs supplied the optional familiar appearance. REA/Ghidra analysis informed waveform display tables, graph geometry and envelope/filter behavior. A new native Cocoa view implements the interaction and VST3 bindings; it does not execute the old editor.
 
-Dark and Polar draw modern vector controls using the same structural layout. Work included dynamic oscillator/filter/envelope graphics, popup semantics, patch-bank parsing, keyboard interaction and scaling. A UI sweep corrected PNG-DPI scaling that displaced oscillator controls, and menu resizing/text layout that stretched arrows or clipped values.
+The resource-independent beta uses project-authored control layouts and illustrative graphs for Dark/Polar. Optional original appearance data is parsed locally at runtime. Earlier work drew modern vector controls using the recovered structural layout. Work included dynamic oscillator/filter/envelope graphics, popup semantics, patch-bank parsing, keyboard interaction and scaling. A UI sweep corrected PNG-DPI scaling that displaced oscillator controls, and menu resizing/text layout that stretched arrows or clipped values.
 
 This is a documented reverse-engineering reconstruction, not recovered vendor source and not a clean-room claim. Graphs visualize editor parameters; they are not a software model of the TI's audio engine.
 
@@ -209,7 +204,7 @@ All proposed repository changes go through a branch and PR. The review policy re
 ## Known limitations
 
 - Development quality and limited hardware/host coverage. No claim that every Virus variant or modern Mac works.
-- VST3 only. No native AU/AAX/VST2 release and no automatic migration of old Virus Control project chunks or plug-in identities.
+- AUv2 and VST3 beta. No AAX/VST2 release and no automatic migration of old Virus Control project chunks or plug-in identities.
 - MIDI scheduling is immediate on the control worker, not sample accurate. Transport/clock synchronization and measured latency compensation need more work.
 - Pitch bend, pressure, program changes, complete parameter synchronization and some encodings remain unfinished. 2,672 catalog parameters do not mean 2,672 verified hardware controls.
 - Local-only algorithm selectors are not hardware-sent or persisted as full synth state. Some UI surfaces are reconstructed placeholders, including the user arp pattern editor and remote templates.
@@ -388,31 +383,8 @@ Regenerate the gallery after building with:
 
 ## Packaging and binary releases
 
-**Build from source:** clone the repository, supply your own installer and run `setup.sh`. This produces a validated local bundle, reversible user-folder installation and checksum manifest. It does not change or restart a currently running DAW.
-
-**Binary releases:** a ready-to-install, signed and notarized package is not available yet. Work toward one includes separating owner-supplied resources from distributable files, Developer ID signing and notarization, broader TI/host/macOS testing, and measured latency and MIDI coverage. A graphical installer can then wrap the resource-import flow. The locally generated ZIP contains Access resources and is for your own installation; it is not a redistributable release of the MIT code alone.
-
-No prebuilt, notarized consumer installer is available. This independent project is not affiliated with or endorsed by Access Music.
-
-## Source map and contributing
-
-| Path | Purpose |
-| --- | --- |
-| `native/vst3/` | Processor/controller, hardware service, FIFO, local API, state and restoration helper |
-| `native/editor/` | Cocoa editor, vector themes, original-artwork renderer, graphs and patch browser |
-| `native/private-midi/` | Vendor-specific interface discovery and restricted MIDI transport |
-| `native/transport-core/`, `native/audio-engine/` | Offline PCM/queue and async lifecycle foundations |
-| `native/usb-descriptors/`, `native/usb-session/`, `native/clock-sync/` | Descriptor, transaction and clock research modules |
-| `native/preview-host/` | Actual VST3 interface preview without hardware connection |
-| `tools/` | Local setup, resource import, control/API tests and research utilities |
-| `docs/` | Architecture history, hardware findings and screenshots |
-
-For a resource-free smoke check, run `sh native/transport-core/build_and_test.sh` and `sh native/clock-sync/build_and_test.sh`. Full editor/service tests require the imported local resources and run through `setup.sh`. The GitHub workflow runs only the source-only checks; it cannot certify hardware behavior or render the proprietary-resource editor.
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the fork → branch → PR workflow, required validation and review policy. Test reports should identify the hardware model, firmware, macOS, host version, sample rate/block size and exact reproduction steps. Keep personal projects, original patch dumps, credentials, vendor assets and raw decompiler output out of commits. A screenshot of a page is not proof of hardware behavior; include readbacks or bounded audio checks for device changes. Any new hardware commands need an explicit allowlist decision and restoration coverage.
-
-## Licence and acknowledgements
-
-New project code is [MIT licensed](LICENSE). See [third-party notices](THIRD_PARTY_NOTICES.md) for the local Access resource boundary, pinned Steinberg SDK and separate emulator research. Generated resources and Original Access screenshots are not relicensed as MIT artwork.
-
-Thanks to Access Music for the Virus hardware and original software, Steinberg for the VST3 SDK, the REA/Ghidra tooling used to investigate the legacy artifacts, and the synth preservation community. This project is independently maintained by Give Me a Signal.
+`tools/build_beta.sh` builds the resource-independent AU/VST3 and graphical setup app, runs the offline
+suites and VST3 validator, and produces a checksum-indexed ZIP. The macOS CI additionally runs `auval`.
+Version tags on reviewed `main` publish beta prereleases only after CI passes. See
+[binary architecture](docs/BINARY_ARCHITECTURE.md) and [beta release notes](docs/BETA_RELEASE.md).
+Developer ID signing and notarization remain future distribution work.
