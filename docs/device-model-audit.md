@@ -13,6 +13,8 @@ The fix shares exact, ASCII case-insensitive family/port classification between
 CoreAudio and CoreMIDI. It accepts the existing generic name and TI/TI2
 Desktop/Keyboard/Polar aliases, recognizes Snow separately, rejects ambiguous
 device/port matches, and gives actionable missing-MIDI diagnostics.
+The historical hardware bench also uses the shared selector and records the
+actual device name instead of relabelling every device `Virus TI`.
 
 **Snow remains unverified and connection is disabled.** Recognition does not
 enable playback: our snapshot, part-write, project-recall and restoration paths
