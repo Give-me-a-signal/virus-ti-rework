@@ -36,6 +36,7 @@
  using namespace Skin;if(![self visible:node])return;Palette p(darkTheme);
  NSDictionary* a=node[@"attrs"];NSString* type=node[@"type"],*name=a[@"Parameter"]?:@"";NSRect r=rectOf(node[@"absolute_rect"]);
  if(r.size.width<=0||r.size.height<=0||NSMinY(r)>=471)return;
+ if(![self needsToDrawRect:NSInsetRect(r,-20,-15)])return;
  if([type isEqual:@"Container"]||[type isEqual:@"Frame"]||[type isEqual:@"PatchContainer"]||[name hasPrefix:@"LockView/"]||[name hasPrefix:@"Locks/"]||[type isEqual:@"PatchSaveMenu"])return;
  if([name hasPrefix:@"Repository Actions/"])return;
  NSInteger part=[self partOf:node];double v=[self plain:name part:part];NSDictionary* def=[self definition:name];double lo=[def[@"minValue"]doubleValue],hi=[def[@"maxValue"]doubleValue];double n=hi>lo?std::clamp((v-lo)/(hi-lo),0.,1.):0;

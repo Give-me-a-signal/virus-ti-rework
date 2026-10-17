@@ -1,5 +1,5 @@
 {
-  "captured_utc": "2026-10-17T12:59:45.039520+00:00",
+  "captured_utc": "2026-10-17T18:32:41.307480+00:00",
   "method": "Real native Cocoa editor offscreen view capture; no mockup, live DAW or hardware",
   "fixtures": "Disconnected native editor; project-authored layouts and optional locally imported original appearance",
   "pages_per_appearance": 12,
@@ -8,7 +8,7 @@
     "polar",
     "original"
   ],
-  "test_binary_sha256": "3f1afee73d8e7305bf0671cea0fe88e837492b10974257f7169f38311728f09a",
+  "test_binary_sha256": "93d8324a59ca5a4a03700ecab00dcde06494611d1e590af6562493a068af95cd",
   "images": {
     "dark-page-00.png": "aa8432d96593e28ac7d02d190ac58b24e68ec171882eaabed0ee0bb5f7ef5c2f",
     "dark-page-01.png": "cc45143cc57225e67003ee83d6fe6c6f14842db1d1346a122a8da09fd5816bc4",

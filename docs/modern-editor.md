@@ -21,8 +21,8 @@ including sidebar M/D and the part-volume knob, remain visibly read-only; CC7
 sliders retain their existing per-part bindings. No new parameter IDs or state
 formats are introduced. This UI change does not integrate pending Snow/clock work.
 
-The AU/VST3/setup build number is 2003 (AU component version 8195), so hosts can
-distinguish it from beta build 2001 and the Snow preview's build 2002. This is a
+The AU/VST3/setup build number is 2004 (AU component version 8196), so hosts can
+distinguish it from beta build 2001 and the Snow preview's build 2002 and the first layout-test build 2003. This is a
 PR test revision, not a change to the existing published releases.
 
 The native editor suite now checks key classic group relationships, centred
@@ -31,6 +31,33 @@ navigation and browser restoration, model-dependent displays, all node bounds,
 non-overlapping enabled hit targets and coordinate conversion at all five scales.
 It also verifies registry ranges/defaults and parameter values remain unchanged.
 Screenshots are disconnected native Cocoa captures, not hardware evidence.
+
+## Editor responsiveness, 17 October 2026
+
+The editor previously invalidated its complete view every 100 ms, including when
+its controls and meters were unchanged. A three-second native preview sample on
+M1 Pro/macOS 26.2 recorded 98 of 443 main-thread sample stacks in AppKit view
+drawing, with 67 inside our `drawRect:`. This confirms wasteful idle repainting;
+it does not reproduce or explain every reported Logic freeze. A separate Logic
+sample did not contain the plug-in, so it is not evidence of an in-host hang.
+
+A nonserialized controller revision now tracks actual parameter changes. The
+heartbeat refreshes a page for automation/patch changes, invalidates only the
+changed MIDI/USB meter strips and connection footer for telemetry, and does not
+invalidate unchanged content. Hidden/occluded windows skip the editor poll;
+controller project-dirty notifications retain their independent existing timer.
+Partial paints skip unrelated controls. Supported-control membership is cached
+instead of linearly scanning all 2,672 parameters for every drawn control. Pointer
+movement inside the same control no longer invalidates the full page.
+
+Regression tests exercise 100 idle heartbeats without repaint, automation and
+unchanged values, both palettes' meter updates, footer changes, patch revision
+handling and hover coalescing. The hardware transport, project capture/recall and
+state format are unchanged. Connected Logic responsiveness still needs a user
+retest; these checks do not establish that all stalls have been fixed. A second
+three-second idle preview sample recorded no editor drawing stacks (532 main-thread
+samples). This is a bounded observation, not a controlled CPU benchmark. All 36
+gallery images remain byte-identical to the layout restoration.
 
 ## Try it
 

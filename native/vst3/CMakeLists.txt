@@ -36,7 +36,7 @@ add_test(NAME vst3_processor_tests COMMAND vst3_processor_tests)
 set_target_properties(VirusTIRework PROPERTIES
  MACOSX_BUNDLE_GUI_IDENTIFIER "org.virus-ti-rework.development.vst3"
  MACOSX_BUNDLE_BUNDLE_NAME "Virus TI Rework"
- MACOSX_BUNDLE_BUNDLE_VERSION "2003"
+ MACOSX_BUNDLE_BUNDLE_VERSION "2004"
  MACOSX_BUNDLE_SHORT_VERSION_STRING "0.2.0")
 
 set_source_files_properties(../editor/editor.mm PROPERTIES COMPILE_FLAGS "-fobjc-arc")
