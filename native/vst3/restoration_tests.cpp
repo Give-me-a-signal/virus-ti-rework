@@ -8,8 +8,8 @@ using namespace VirusRework;
 namespace fs=std::filesystem;
 void writeFile(const fs::path& p,const PatchBytes& b){std::ofstream f(p,std::ios::binary);f.write((const char*)b.data(),b.size());}
 struct FakeDevice{
- RestoreSnapshot data;unsigned writes=0,reads=0;int fail=-1;bool failed=false;
- void send(const PatchBytes& b){++writes;if(b.size()==524){assert(b[7]==0);auto p=b[8];if(p==fail){failed=true;throw std::runtime_error("injected write failure");}if(p==64)data.single=b;else{assert(p<16);data.project.parts[p]=b;}}else if(b.size()==267){validateMulti(b);data.project.multi=b;}else{assert(b.size()==3||b.size()==11);}}
+ RestoreSnapshot data;unsigned writes=0,reads=0;bool settling=false;unsigned settled=0;int fail=-1;bool failed=false;
+ void send(const PatchBytes& b){++writes;assert(!settling);if(b.size()==524){assert(b[7]==0);auto p=b[8];if(p==fail){failed=true;throw std::runtime_error("injected write failure");}if(p==64)data.single=b;else{assert(p<16);data.project.parts[p]=b;}}else if(b.size()==267){validateMulti(b);data.project.multi=b;settling=true;}else{assert(b.size()==3||b.size()==11);}}
  PatchBytes single(unsigned p){++reads;return p==64?data.single:data.project.parts[p];}
  PatchBytes multi(){++reads;return data.project.multi;}
 };
@@ -23,8 +23,8 @@ int main(int argc,char** argv){
  auto loaded=RestoreSnapshot::read(directory);assert(loaded.project.parts==original.project.parts);
  auto corrupt=original.project.parts[0];corrupt[100]^=1;writeFile(directory/"before-part0.syx",corrupt);bool rejected=false;try{RestoreSnapshot::read(directory);}catch(...){rejected=true;}assert(rejected);writeFile(directory/"before-part0.syx",original.project.parts[0]);
  auto wrong=virus::patches::ram_single(parsed,1);writeFile(directory/"before-part0.syx",wrong);rejected=false;try{RestoreSnapshot::read(directory);}catch(...){rejected=true;}assert(rejected);writeFile(directory/"before-part0.syx",original.project.parts[0]);
- FakeDevice device{original};device.data.single.clear();unsigned saved=0;restoreSnapshot(device,original,[&](auto,auto){++saved;},[](auto){});assert(saved==18&&device.data.single==original.single);
- device.fail=3;saved=0;rejected=false;try{restoreSnapshot(device,original,[&](auto,auto){++saved;},[](auto){});}catch(...){rejected=true;}assert(rejected&&device.failed&&saved==18);
+ FakeDevice device{original};device.data.single.clear();unsigned saved=0;restoreSnapshot(device,original,[&](auto,auto){++saved;},[&](unsigned ms){if(device.settling){assert(ms>=multiSettleMs);device.settling=false;++device.settled;}});assert(saved==18&&device.data.single==original.single&&device.settled==1);
+ device.fail=3;saved=0;rejected=false;try{restoreSnapshot(device,original,[&](auto,auto){++saved;},[&](unsigned ms){if(device.settling){assert(ms>=multiSettleMs);device.settling=false;++device.settled;}});}catch(...){rejected=true;}assert(rejected&&device.failed&&saved==18);
  int lease=open((directory/"lock").c_str(),O_CREAT|O_RDWR|O_CLOEXEC,0600);assert(lease>=0&&flock(lease,LOCK_EX|LOCK_NB)==0);
  // The shipped helper must reject invalid snapshots before it opens hardware.
  writeFile(directory/"before-part0.syx",corrupt);rejected=false;

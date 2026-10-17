@@ -1,0 +1,46 @@
+name: Full tester binaries
+on:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  full-tester:
+    if: github.head_ref == 'codex/full-tester-build' || github.event_name == 'workflow_dispatch'
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Verify clean Apple Silicon environment
+        run: |
+          test "$(uname -m)" = arm64
+          test ! -d analysis
+          test ! -d "$HOME/Library/Application Support/VirusTIRework"
+          brew install cmake ninja
+      - name: Build and audit combined test package
+        env:
+          VTR_FULL_TEST_BUILD: '1'
+          VTR_BUILD_DIR: native/vst3/build-full-test
+        run: bash tools/build_beta.sh
+      - name: Validate installed test AU
+        run: |
+          mkdir -p "$HOME/Library/Audio/Plug-Ins/Components"
+          ditto "native/vst3/build-full-test/AU/Virus TI Rework.component" "$HOME/Library/Audio/Plug-Ins/Components/Virus TI Rework.component"
+          killall -9 AudioComponentRegistrar 2>/dev/null || true
+          if ! auval -v aumu VtRw GmAS -strict -qp > native/vst3/build-full-test/auval.log 2>&1; then
+            cat native/vst3/build-full-test/auval.log
+            exit 1
+          fi
+      - name: Upload test binaries and validation
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: Virus-TI-Rework-full-test-macOS-arm64
+          path: |
+            dist/Virus-TI-Rework-0.2.0-test.1-macOS-arm64.zip
+            dist/SHA256SUMS.txt
+            native/vst3/build-full-test/validator.log
+            native/vst3/build-full-test/auval.log
+          if-no-files-found: error

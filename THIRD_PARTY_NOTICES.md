@@ -26,6 +26,10 @@ revision in `native/vst3/sdk-lock.json`. The checked revision and its SDK
 submodules carry MIT licences. Retain their licence files in any binary package;
 the setup packaging command copies them into `Contents/Resources/Licenses`.
 The SDK checkout is not vendored in this repository.
+The build generates a local copy of the pinned AU wrapper with a project-owned
+`IComponentHandler2` adaptation forwarding non-parameter dirty state to AU
+ClassInfo property notifications. Upstream copyright headers remain intact;
+`native/vst3/au_wrapper_state.cmake` records the complete adaptation.
 
 ## Separate emulator research
 
@@ -44,3 +48,33 @@ Retain the upstream licence in binary distributions. Steinberg's wrapper is MIT.
 Public beta archives contain native project code and dependency notices, not Access
 resources. They are ad-hoc signed and unnotarized; Developer ID signing and
 notarization are planned separately. Optional Access appearance imports remain local.
+
+## TI Revive automation queue and timing findings
+
+`native/vst3/automation_queue.h` adapts the bounded automation queue from
+[TI Revive](https://github.com/derpsn/access-virus-ti-revive), revision
+`21b83e6f9c05497d8331023e9ff6845361c2d36c`. Marker detection and scheduling
+are independently adapted to Rework's six-channel, 48 kHz stream using the
+protocol observations in its evidence E139–E145 and our issue #5.
+
+MIT License
+
+Copyright (c) 2026 derpsn
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

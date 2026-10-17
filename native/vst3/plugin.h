@@ -62,10 +62,13 @@ public:
  void hardwareCommand(int);
  void hardwarePreset(const std::vector<uint8_t>&,unsigned part=0);
  bool hardwareConnected=false;
+ unsigned hardwarePartCount=16;
  MeterSnapshot hardwareMeters;
  ProjectPatches hardwarePatches;
  std::vector<uint8_t> hardwarePatch;
  uint64_t patchRevision=0;
+ uint64_t editorParameterRevision=0; // UI-thread parameter changes; not serialized
+ tresult PLUGIN_API setParamNormalized(ParamID,ParamValue) override;
  tresult PLUGIN_API notify(IMessage*) override;
  std::string hardwareText="Disconnected · Start with TI in Single mode";
  static FUnknown* create(void*) {return static_cast<IEditController*>(new Controller);}

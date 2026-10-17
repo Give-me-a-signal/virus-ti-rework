@@ -1,4 +1,5 @@
 #include "plugin.h"
+#include <cstdlib>
 #include "editor.h"
 #include "browser_bank.hpp"
 #include "midi_core.hpp"
@@ -61,8 +62,10 @@ Processor::Processor() {
 Processor::~Processor() {hardware_->shutdownControl();hardware_.reset();bridge_->restart(false);bridge_->release();}
 tresult PLUGIN_API Processor::terminate(){hardware_->shutdown();return AudioEffect::terminate();}
 tresult PLUGIN_API Processor::setupProcessing(ProcessSetup& setup) {
- if(!std::isfinite(setup.sampleRate)||setup.sampleRate<32000||setup.sampleRate>192000)return kInvalidArgument;
- auto result=AudioEffect::setupProcessing(setup);if(result==kResultOk)hardware_->setup(setup.sampleRate);return result;
+ if(!std::isfinite(setup.sampleRate)||setup.sampleRate<32000||setup.sampleRate>192000||setup.maxSamplesPerBlock<1)return kInvalidArgument;
+ // This opt-in transport must fit the unambiguous 14-bit device horizon.
+ if(std::getenv("VTR_ENABLE_MARKER_TIMING")&&std::strcmp(std::getenv("VTR_ENABLE_MARKER_TIMING"),"1")==0&&setup.maxSamplesPerBlock*48000./setup.sampleRate+2048>=8192)return kInvalidArgument;
+ auto result=AudioEffect::setupProcessing(setup);if(result==kResultOk)hardware_->setup(setup.sampleRate,setup.maxSamplesPerBlock);return result;
 }
 uint32 PLUGIN_API Processor::getLatencySamples(){return bridge_==&disconnected_?hardware_->latency():0;}
 tresult PLUGIN_API Processor::notify(IMessage* message){
@@ -75,19 +78,26 @@ tresult PLUGIN_API Processor::notify(IMessage* message){
    if(operation==4){const void* data=nullptr;uint32 size=0;if(message->getAttributes()->getBinary("patch",data,size)==kResultOk&&data&&(size==267||size==524))hardware_->loadPreset(std::vector<uint8_t>(static_cast<const uint8_t*>(data),static_cast<const uint8_t*>(data)+size),unsigned(target));}
    else hardware_->command(int(operation));
   }
-  auto reply=owned(allocateMessage());if(reply){reply->setMessageID("VTRHardwareStatus");auto text=hardware_->status();reply->getAttributes()->setBinary("text",text.c_str(),uint32(text.size()+1));reply->getAttributes()->setInt("connected",hardware_->connected());auto meters=hardware_->meters();for(unsigned bus=0;bus<3;++bus)reply->getAttributes()->setFloat(("usbMeter"+std::to_string(bus)).c_str(),meters.usbPeak[bus]);for(unsigned part=0;part<16;++part)reply->getAttributes()->setFloat(("midiActivity"+std::to_string(part)).c_str(),meters.midiActivity[part]);for(unsigned part=0;part<16;++part){auto patch=hardware_->currentPreset(part);auto key="patch"+std::to_string(part);if(!patch.empty())reply->getAttributes()->setBinary(key.c_str(),patch.data(),uint32(patch.size()));}sendMessage(reply);}
+  auto reply=owned(allocateMessage());if(reply){reply->setMessageID("VTRHardwareStatus");auto text=hardware_->status();reply->getAttributes()->setBinary("text",text.c_str(),uint32(text.size()+1));reply->getAttributes()->setInt("connected",hardware_->connected());reply->getAttributes()->setInt("activeParts",hardware_->activePartCount());auto meters=hardware_->meters();for(unsigned bus=0;bus<3;++bus)reply->getAttributes()->setFloat(("usbMeter"+std::to_string(bus)).c_str(),meters.usbPeak[bus]);for(unsigned part=0;part<16;++part)reply->getAttributes()->setFloat(("midiActivity"+std::to_string(part)).c_str(),meters.midiActivity[part]);for(unsigned part=0;part<16;++part){auto patch=hardware_->currentPreset(part);auto key="patch"+std::to_string(part);if(!patch.empty())reply->getAttributes()->setBinary(key.c_str(),patch.data(),uint32(patch.size()));}sendMessage(reply);}
   return kResultOk;
  }
  return AudioEffect::notify(message);
 }
 void Controller::hardwareCommand(int operation){auto message=owned(allocateMessage());if(message){message->setMessageID("VTRHardware");message->getAttributes()->setInt("operation",operation);sendMessage(message);}}
+tresult PLUGIN_API Controller::setParamNormalized(ParamID id,ParamValue value){
+ const auto previous=getParamNormalized(id);
+ auto result=EditControllerEx1::setParamNormalized(id,value);
+ if(result==kResultOk&&getParamNormalized(id)!=previous)++editorParameterRevision;
+ return result;
+}
 void Controller::hardwarePreset(const std::vector<uint8_t>& patch,unsigned part){auto message=owned(allocateMessage());if(message){message->setMessageID("VTRHardware");message->getAttributes()->setInt("operation",4);message->getAttributes()->setInt("part",part);message->getAttributes()->setBinary("patch",patch.data(),uint32(patch.size()));sendMessage(message);}}
 tresult PLUGIN_API Controller::notify(IMessage* message){
  if(message&&std::strcmp(message->getMessageID(),"VTRStateRevision")==0){
   int64 revision=0;if(message->getAttributes()->getInt("revision",revision)==kResultOk&&revision!=observedStateRevision){observedStateRevision=revision;setDirty(true);}return kResultOk;
  }
  if(message&&std::strcmp(message->getMessageID(),"VTRHardwareStatus")==0){const void* data=nullptr;uint32 bytes=0;if(message->getAttributes()->getBinary("text",data,bytes)==kResultOk&&data&&bytes>0&&bytes<4096&&static_cast<const char*>(data)[bytes-1]==0)hardwareText=static_cast<const char*>(data);int64 connected=0;message->getAttributes()->getInt("connected",connected);hardwareConnected=connected!=0;
-  hardwareMeters={};if(hardwareConnected)for(unsigned bus=0;bus<3;++bus){double level=0;message->getAttributes()->getFloat(("usbMeter"+std::to_string(bus)).c_str(),level);if(std::isfinite(level)&&level>=0)hardwareMeters.usbPeak[bus]=float(level);}
+  int64 count=16;if(message->getAttributes()->getInt("activeParts",count)==kResultOk&&(count==4||count==16))hardwarePartCount=unsigned(count);
+  hardwareMeters={};if(hardwareConnected)for(unsigned bus=0;bus<3;++bus){double level=0;message->getAttributes()->getFloat(("usbMeter"+std::to_string(bus)).c_str(),level);if(std::isfinite(level)&&level>=0&&(hardwarePartCount!=4||bus<2))hardwareMeters.usbPeak[bus]=float(level);}
   if(hardwareConnected)for(unsigned part=0;part<16;++part){double level=0;message->getAttributes()->getFloat(("midiActivity"+std::to_string(part)).c_str(),level);if(std::isfinite(level)&&level>=0&&level<=1)hardwareMeters.midiActivity[part]=float(level);}
   for(unsigned part=0;part<16;++part){auto key="patch"+std::to_string(part);if(message->getAttributes()->getBinary(key.c_str(),data,bytes)==kResultOk&&data&&(bytes==524||bytes==267)){PatchBytes patch(static_cast<const uint8_t*>(data),static_cast<const uint8_t*>(data)+bytes);if(patch!=hardwarePatches.parts[part]){hardwarePatches.parts[part]=std::move(patch);++patchRevision;}}}hardwarePatch=hardwarePatches.parts[0];
 
@@ -141,7 +151,8 @@ tresult PLUGIN_API Processor::process(ProcessData& d) {
    else projectValid_=false;
   }
  } else projectValid_=false;
- if(bridge_==&disconnected_)hardware_->beginBlock(active_&&processing_&&d.processMode!=kOffline);
+ if(bridge_==&disconnected_){auto* c=d.processContext;hardware_->beginBlock(active_&&processing_&&d.processMode!=kOffline,unsigned(d.numSamples),c&&(c->state&ProcessContext::kTempoValid)?c->tempo:120,c?c->projectTimeMusic:0,c&&(c->state&ProcessContext::kPlaying),c&&(c->state&ProcessContext::kProjectTimeMusicValid));}
+ auto queueMidi=[&](unsigned offset,const std::array<uint8_t,3>& bytes){return bridge_==&disconnected_?hardware_->queueMidi(offset,bytes):bridge_->send(hostFrame_,offset,bytes);};
  // Host buffers always initialized, including inactive/disconnected/underrun.
 
  for(int b=0;b<d.numOutputs;++b) {
@@ -180,7 +191,7 @@ tresult PLUGIN_API Processor::process(ProcessData& d) {
     if(spec.midiCC>=0&&active_&&processing_&&d.numSamples>0&&d.processMode!=kOffline) {
      std::array<uint8_t,3> bytes{};
      auto discrete=static_cast<unsigned>(std::lround(spec.minimum+value*(spec.maximum-spec.minimum)));
-     if(virus::midi::build_control_change(spec.part-1,spec.midiCC,discrete,bytes))bridge_->send(hostFrame_,offset,bytes);
+     if(virus::midi::build_control_change(spec.part-1,spec.midiCC,discrete,bytes))queueMidi(offset,bytes);
     }
    }
   }
@@ -203,12 +214,13 @@ tresult PLUGIN_API Processor::process(ProcessData& d) {
     if(event.type==Event::kNoteOnEvent)bytes={static_cast<uint8_t>(0x90|event.noteOn.channel),static_cast<uint8_t>(event.noteOn.pitch),static_cast<uint8_t>(std::lround(event.noteOn.velocity*127))};
     else if(event.type==Event::kNoteOffEvent)bytes={static_cast<uint8_t>(0x80|event.noteOff.channel),static_cast<uint8_t>(event.noteOff.pitch),static_cast<uint8_t>(std::lround(event.noteOff.velocity*127))};
     else virus::midi::build_poly_pressure(event.polyPressure.channel,event.polyPressure.pitch,static_cast<unsigned>(std::lround(event.polyPressure.pressure*127)),bytes);
-    if(active_&&processing_&&d.processMode!=kOffline)bridge_->send(hostFrame_,event.sampleOffset,bytes);
+    if(active_&&processing_&&d.processMode!=kOffline)queueMidi(event.sampleOffset,bytes);
    } else ++rejected_;
   }
  }
  hostFrame_+=static_cast<uint64_t>(d.numSamples);
  bridge_->completeBlock(hostFrame_);
+ if(bridge_==&disconnected_)hardware_->endBlock();
  return kResultOk;
 }
 tresult PLUGIN_API Processor::getState(IBStream* stream) {
@@ -263,10 +275,13 @@ tresult PLUGIN_API Controller::getMidiControllerAssignment(int32 bus,int16 chann
 }
 }
 #ifndef VIRUS_REWORK_TEST
+#ifndef VTR_PLUGIN_VERSION
+#define VTR_PLUGIN_VERSION "0.2.0-beta.1"
+#endif
 using namespace Steinberg;
 using namespace Steinberg::Vst;
 BEGIN_FACTORY_DEF("Virus TI Rework Project","","")
-DEF_CLASS2(INLINE_UID_FROM_FUID(VirusRework::kProcessorID),PClassInfo::kManyInstances,kVstAudioEffectClass,"Virus TI Rework",0,"Instrument|External","0.2.0-beta.1",kVstVersionString,VirusRework::Processor::create)
-DEF_CLASS2(INLINE_UID_FROM_FUID(VirusRework::kControllerID),PClassInfo::kManyInstances,kVstComponentControllerClass,"Virus TI Rework Controller",0,"","0.2.0-beta.1",kVstVersionString,VirusRework::Controller::create)
+DEF_CLASS2(INLINE_UID_FROM_FUID(VirusRework::kProcessorID),PClassInfo::kManyInstances,kVstAudioEffectClass,"Virus TI Rework",0,"Instrument|External",VTR_PLUGIN_VERSION,kVstVersionString,VirusRework::Processor::create)
+DEF_CLASS2(INLINE_UID_FROM_FUID(VirusRework::kControllerID),PClassInfo::kManyInstances,kVstComponentControllerClass,"Virus TI Rework Controller",0,"",VTR_PLUGIN_VERSION,kVstVersionString,VirusRework::Controller::create)
 END_FACTORY
 #endif

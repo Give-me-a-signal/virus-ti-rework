@@ -11,7 +11,9 @@
 #include <functional>
 #include <array>
 #include "usb_midi1.hpp"
+#include "../device-identity/include/virus/device_identity.hpp"
 #include "virus/usb_descriptors.hpp"
+#include "../vst3/timed_midi.h"
 
 namespace virus::private_midi {
 inline int number(io_service_t service,CFStringRef key){id v=CFBridgingRelease(IORegistryEntryCreateCFProperty(service,key,kCFAllocatorDefault,0));if(![v isKindOfClass:NSNumber.class])throw std::runtime_error("Missing USB identity property");return [v intValue];}
@@ -47,17 +49,27 @@ public:
  uint64_t registryID=0;
  unsigned interfaceNumber=0,inAddress=0,outAddress=0,inType=0,outType=0;
  std::vector<uint8_t> configuration;
- PrivateUSB(){
+ explicit PrivateUSB(bool requireSnowIdentity=false){
   io_iterator_t iterator=0;auto match=IOServiceMatching("IOUSBHostInterface");
   if(IOServiceGetMatchingServices(kIOMainPortDefault,match,&iterator)!=KERN_SUCCESS)throw std::runtime_error("USB interface enumeration failed");
-  struct Candidate{io_service_t service;int number;int location;};std::vector<Candidate> candidates;
-  for(io_service_t s;(s=IOIteratorNext(iterator));){try{if(number(s,CFSTR("idVendor"))==0x133e&&number(s,CFSTR("idProduct"))==0x0815&&number(s,CFSTR("bInterfaceClass"))==255&&number(s,CFSTR("bInterfaceSubClass"))==0&&number(s,CFSTR("bInterfaceProtocol"))==0)candidates.push_back({s,number(s,CFSTR("bInterfaceNumber")),number(s,CFSTR("locationID"))});else IOObjectRelease(s);}catch(...){IOObjectRelease(s);}}
+  struct Candidate{io_service_t service;int number;int location;int product;};std::vector<Candidate> candidates;
+  for(io_service_t s;(s=IOIteratorNext(iterator));){try{if(virus::identity::legacyUSB(number(s,CFSTR("idVendor")),number(s,CFSTR("idProduct")))&&number(s,CFSTR("bInterfaceClass"))==255&&number(s,CFSTR("bInterfaceSubClass"))==0&&number(s,CFSTR("bInterfaceProtocol"))==0)candidates.push_back({s,number(s,CFSTR("bInterfaceNumber")),number(s,CFSTR("locationID")),number(s,CFSTR("idProduct"))});else IOObjectRelease(s);}catch(...){IOObjectRelease(s);}}
   IOObjectRelease(iterator);
+  // Recognize both legacy IDs, but do not open an unvalidated transport profile.
+  // Release every registry reference before returning this diagnostic.
+  if(std::any_of(candidates.begin(),candidates.end(),[](auto c){return c.product==virus::identity::otherLegacyProduct;})){
+   for(auto c:candidates)IOObjectRelease(c.service);
+   virus::identity::requireTransportProduct(virus::identity::otherLegacyProduct);
+  }
   std::sort(candidates.begin(),candidates.end(),[](auto a,auto b){return a.number<b.number;});
-  if(candidates.size()!=2||candidates[0].location!=candidates[1].location){for(auto c:candidates)IOObjectRelease(c.service);throw std::runtime_error("Expected exactly two vendor interfaces on one TI Desktop");}
+  if(candidates.size()!=2||candidates[0].location!=candidates[1].location){for(auto c:candidates)IOObjectRelease(c.service);throw std::runtime_error("Expected exactly two vendor interfaces on one Virus TI (16-part transport)");}
   // Legacy CreateHiddenPortInterface explicitly skips the first matching
   // vendor interface and uses the second. Do not claim the public MIDI port.
   auto selected=candidates[1];interfaceNumber=selected.number;IORegistryEntryGetRegistryEntryID(selected.service,&registryID);
+  if(requireSnowIdentity){
+   id product=CFBridgingRelease(IORegistryEntrySearchCFProperty(selected.service,kIOServicePlane,CFSTR("USB Product Name"),kCFAllocatorDefault,kIORegistryIterateRecursively|kIORegistryIterateParents));
+   if(![product isKindOfClass:NSString.class]||virus::identity::family([product UTF8String])!=virus::identity::Family::snow){for(auto c:candidates)IOObjectRelease(c.service);throw std::runtime_error("Snow USB product identity missing or mismatched; no RAM commands sent");}
+  }
   NSError* error=nil;
   interface_=[[IOUSBHostInterface alloc]initWithIOService:selected.service options:IOUSBHostObjectInitOptionsNone queue:nil error:&error interestHandler:nil];
   for(auto c:candidates)IOObjectRelease(c.service);
@@ -101,6 +113,17 @@ public:
   if(midi::encode_usb_midi1_message(2,bytes.data(),bytes.size(),packets.data(),packets.size(),n)!=midi::USBMidiResult::ok)throw std::runtime_error("Invalid private message");
   auto* p=reinterpret_cast<const uint8_t*>(packets.data());
   for(size_t pos=0;pos<n*4;pos+=32){std::vector<uint8_t> fragment(p+pos,p+std::min(pos+32,n*4));transfer(out_,fragment,1000,false);std::lock_guard<std::mutex> g(logLock_);rawWrites_.push_back(fragment);}
+ }
+ void sendTimed(const std::vector<uint8_t>& bytes,uint16_t stamp,bool clock=false){
+  sendTimedBatch({{bytes,stamp,clock}});
+ }
+ void sendTimedBatch(const std::vector<VirusRework::TimedMessage>& batch){
+  const auto packets=VirusRework::timedBatchPackets(batch);
+  std::lock_guard<std::mutex> writer(writeLock_);
+  for(size_t pos=0;pos<packets.size();pos+=32){
+   std::vector<uint8_t> fragment(packets.begin()+pos,packets.begin()+std::min(pos+32,packets.size()));
+   transfer(out_,fragment,1000,false);std::lock_guard<std::mutex> g(logLock_);rawWrites_.push_back(fragment);
+  }
  }
  void saveTraffic(NSString* directory){stopReader();std::lock_guard<std::mutex> g(logLock_);NSMutableData* reads=[NSMutableData data];NSMutableData* writes=[NSMutableData data];for(auto& p:rawReads_)[reads appendBytes:p.data() length:p.size()];for(auto& p:rawWrites_)[writes appendBytes:p.data() length:p.size()];[reads writeToFile:[directory stringByAppendingPathComponent:@"private-in.bin"] atomically:YES];[writes writeToFile:[directory stringByAppendingPathComponent:@"private-out.bin"] atomically:YES];}
  PrivateUSB(const PrivateUSB&)=delete;PrivateUSB& operator=(const PrivateUSB&)=delete;

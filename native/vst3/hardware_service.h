@@ -25,12 +25,19 @@ public:
  std::string status() const;
  std::string controlEndpoint() const;
  void hostProcessing(bool active) noexcept;
- void setup(double rate); // inactive, non-audio caller
- void beginBlock(bool active) noexcept;
+ void setup(double rate,unsigned maxBlock=256); // inactive, non-audio caller
+ void beginBlock(bool active,unsigned samples=0,double tempo=120,double beats=0,bool playing=false,bool beatsValid=false) noexcept;
+ bool queueMidi(unsigned offset,std::array<uint8_t,3>)noexcept;
+ void endBlock()noexcept;
  bool render(std::array<int32_t,6>&) noexcept;
  bool connected() const noexcept;
  uint64_t stateRevision() const noexcept;
  unsigned latency() const noexcept;
+#ifdef VIRUS_REWORK_TEST
+ static bool testCaptureUnderrunFallback(); // synthetic FIFO exhaustion; no device I/O
+ static bool testSnowTimingIsolation(); // combined model/queue/capture path, no device I/O
+#endif
+ unsigned activePartCount() const noexcept;
 private:
  struct Impl;
  std::unique_ptr<Impl> impl;

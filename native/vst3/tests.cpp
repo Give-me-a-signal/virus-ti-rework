@@ -1,5 +1,6 @@
 #include "plugin.h"
 #include "midi_safety.h"
+#include "hardware_service.h"
 #include "public.sdk/source/common/memorystream.h"
 #include "public.sdk/source/vst/hosting/parameterchanges.h"
 #include "public.sdk/source/vst/hosting/eventlist.h"
@@ -224,9 +225,31 @@ int main() {
  auto multi=std::vector<uint8_t>(267,0);multi[0]=0xf0;multi[2]=0x20;multi[3]=0x33;multi[4]=1;multi[5]=16;multi[6]=17;multi[8]=127;multi.back()=0xf7;multiChecksum(multi);blob(multi);
  MemoryStream sixteenInput(sixteen.data(),sixteen.size());CHECK(restored.setState(&sixteenInput)==kResultOk);
  MemoryStream sixteenSaved;CHECK(restored.getState(&sixteenSaved)==kResultOk);CHECK(sixteenSaved.getSize()==40871);
+ for(unsigned cycle=0;cycle<20;++cycle){
+  sixteenSaved.seek(0,IBStream::kIBSeekSet,nullptr);CHECK(restored.setState(&sixteenSaved)==kResultOk);
+  MemoryStream again;CHECK(restored.getState(&again)==kResultOk);CHECK(again.getSize()==sixteenSaved.getSize());
+  CHECK(std::memcmp(again.getData(),sixteenSaved.getData(),again.getSize())==0);
+ }
+
  sixteenSaved.seek(0,IBStream::kIBSeekSet,nullptr);CHECK(c.setComponentState(&sixteenSaved)==kResultOk);
  for(unsigned part=0;part<16;++part)CHECK(c.hardwarePatches.parts[part]==expected.parts[part]);
  for(size_t size=12+2672*12;size<sixteen.size();++size){MemoryStream truncated(sixteen.data(),size);CHECK(restored.setState(&truncated)==kResultFalse);}
+ // A four-part project's inactive slots remain empty in the existing v3
+ // format. Ten real processor/controller round trips must not append records,
+ // populate parts 5–16, change routing or connect to hardware while dormant.
+ sixteen=raw;sixteen.resize(12+2672*12);u32(0);u32(16);
+ for(unsigned part=0;part<16;++part)blob(part<4?expected.parts[part]:PatchBytes{});
+ blob(multi);
+ for(unsigned repeat=0;repeat<10;++repeat){
+  MemoryStream input(sixteen.data(),sixteen.size());CHECK(restored.setState(&input)==kResultOk);
+  MemoryStream saved;CHECK(restored.getState(&saved)==kResultOk);
+  CHECK(saved.getSize()==156+2672*12+4*524+267);
+  saved.seek(0,IBStream::kIBSeekSet,nullptr);CHECK(c.setComponentState(&saved)==kResultOk);
+  for(unsigned part=0;part<16;++part)CHECK(c.hardwarePatches.parts[part]==(part<4?expected.parts[part]:PatchBytes{}));
+  CHECK(c.hardwarePatches.multi==multi);
+  if(repeat)CHECK(sixteen.size()==size_t(saved.getSize())&&std::memcmp(sixteen.data(),saved.getData(),sixteen.size())==0);
+  sixteen.assign(saved.getData(),saved.getData()+saved.getSize());
+ }
  // A separate processor does not inherit this instance's saved patch.
  MemoryStream isolated;CHECK(p.getState(&isolated)==kResultOk);CHECK(isolated.getSize()==156+2672*12);
  ParamID id=0;CHECK(c.getMidiControllerAssignment(0,15,1,id)==kResultTrue);CHECK(c.getMidiControllerAssignment(0,16,1,id)==kResultFalse);CHECK(c.getMidiControllerAssignment(1,0,1,id)==kResultFalse);CHECK(c.getMidiControllerAssignment(0,0,kPitchBend,id)==kResultFalse);
@@ -238,6 +261,8 @@ int main() {
  data.numSamples=128;data.numOutputs=0;data.outputs=nullptr;data.inputEvents=&flood;
  CHECK(process(p,data)==kResultOk);CHECK(p.acceptedEvents()==accepted+4096);CHECK(p.rejectedEvents()==rejected+904);
  connectedBridgeTests();
+ CHECK(HardwareService::testCaptureUnderrunFallback());
+ CHECK(HardwareService::testSnowTimingIsolation());
  CHECK(processAllocations==0);
  p.terminate();c.terminate();
  std::cout<<"PASS: native processor/controller, nonzero six-channel PCM, exact MIDI offsets, bridge lifecycle, underrun, discontinuity, zero process allocations, catalog, state and "<<raw.size()<<" state truncations\n";

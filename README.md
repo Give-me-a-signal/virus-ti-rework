@@ -8,6 +8,12 @@ An independent, open-source community project by **Give Me a Signal** to keep ow
 
 **Normal installation needs no compiler, Terminal commands or original Access installer.** Dark and Polar are included. Importing your own Access installer is optional and adds the legacy appearance.
 
+**Combined tester candidate: 0.2.0-test.1 (build 2005).** This branch integrates
+PRs #6/#7/#9/#11. Read the [tester guide and known blockers](docs/FULL_TEST_BUILD.md)
+before using its separate prerelease. Connected Logic AU recall remains
+unresolved, physical Snow support is unverified, and marker timing stays off by
+default. The earlier beta's hardware results do not validate this combined build.
+
 ![Virus TI Rework — Modern Dark filter page](docs/screenshots/dark-page-03.png)
 
 [Install](#setup) · [Legacy appearance](#optional-original-access-appearance) · [Tested setups](#tested-setups) · [AI-assisted setup](#ai-assisted-setup-for-non-technical-users) · [What works](#what-works) · [How it works](#how-it-works) · [Engineering history](#how-we-built-it) · [Screenshots](#interface-gallery) · [Limitations](#known-limitations) · [Help test](#help-test-on-more-macs-and-synths) · [Contribute](CONTRIBUTING.md) · [Release packaging](#packaging-and-binary-releases)
@@ -120,6 +126,20 @@ A deployment target does not establish compatibility with every OS or host. TI D
 validation target; TI2/Snow remain unverified. The packaged beta has bounded smoke-test results for Logic Pro,
 Bitwig, Ableton Live and LiveProfessor on M1 Pro/macOS 26.2. Coverage differs by host; GarageBand remains
 untested. Read the [host test report](docs/daw-beta-validation-2026-10-15.md) and [compatibility matrix](docs/COMPATIBILITY.md).
+
+**Snow:** [issue #8](https://github.com/Give-me-a-signal/virus-ti-rework/issues/8) reports
+that the published beta rejects its `Virus TI Snow` audio name. The source change
+in [PR #9](https://github.com/Give-me-a-signal/virus-ti-rework/pull/9) recognizes
+that name and lets the regular **Connect TI** button select the
+[four-part Snow path](docs/snow-four-part-recall.md) in either build variant.
+It requires stable current-format originals and recovery-helper readiness before
+RAM edits. Snow's physical initialization, routing and recovery remain **unverified**;
+[local firmware-emulation results](docs/snow-emulator-validation-2026-10-15.md)
+do not establish hardware compatibility. See the [Snow testing instructions](docs/SNOW_TEST_BUILD.md).
+The published 0.2.0-beta.1 is unchanged; the earlier snow-test.1 download still uses
+its separate **Snow test…** button. This PR update has not replaced either release.
+The audit also covers TI/TI2 Desktop, Keyboard and Polar discovery names; those
+additional models remain unverified.
 
 ### Tested setups
 
@@ -518,3 +538,5 @@ suites and VST3 validator, and produces a checksum-indexed ZIP. The macOS CI add
 Version tags on reviewed `main` publish beta prereleases only after CI passes. See
 [binary architecture](docs/BINARY_ARCHITECTURE.md) and [beta release notes](docs/BETA_RELEASE.md).
 Developer ID signing and notarization remain future distribution work.
+
+Developer follow-up: [ownership/recall findings](docs/collaborator-findings-5.md) and [experimental marker-timing design and test limits](docs/marker-clock-integration.md). Marker timing is disabled by default pending hardware validation; these drafts do not change the released beta.
