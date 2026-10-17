@@ -21,6 +21,7 @@ int main(int argc,char** argv){
   std::string directory=argv[1];NSString* root=@(directory.c_str());report=[root stringByAppendingPathComponent:@"restoration-status.json"];
   size_t parsed=0;auto expected=std::stoull(argv[2],&parsed);if(!expected||parsed!=std::string(argv[2]).size())throw std::runtime_error("Invalid USB identity");
   auto original=VirusRework::RestoreSnapshot::read(directory); // immutable private copy before host edits
+  VirusRework::requireSessionProfile(original.model,original.snowTestConsent);
   status(@"armed");char armed='A';if(write(STDOUT_FILENO,&armed,1)!=1)throw std::runtime_error("Parent readiness pipe closed");
   char command=0;ssize_t count;do{count=read(STDIN_FILENO,&command,1);}while(count<0&&errno==EINTR);close(STDIN_FILENO);
   if(count==1&&command=='D'){status(@"completed-by-plugin");char done='D';write(STDOUT_FILENO,&done,1);return 0;}
@@ -33,7 +34,7 @@ int main(int argc,char** argv){
   // USB/CoreMIDI teardown can lag a killed host by a short interval. Probe
   // without changing RAM before beginning the restoration transaction.
   for(unsigned attempt=0;attempt<10&&!device;++attempt){
-   try{auto candidate=std::make_unique<virus::hardware::Midi>();candidate->usePrivate();
+   try{auto candidate=std::make_unique<virus::hardware::Midi>(original.snowTestConsent);candidate->usePrivate(original.model==VirusRework::DeviceModel::snow4);
     if(candidate->registryID()!=expected)throw std::runtime_error("USB identity changed; refusing to restore another device");
     candidate->single(64);device=std::move(candidate);
    }catch(const std::exception& e){lastError=e.what();if(lastError.find("identity changed")!=std::string::npos)throw;std::this_thread::sleep_for(std::chrono::milliseconds(200));}
@@ -45,8 +46,8 @@ int main(int argc,char** argv){
   auto save=[&](std::string name,const std::vector<uint8_t>& bytes){if(![[NSData dataWithBytes:bytes.data() length:bytes.size()]writeToFile:[output stringByAppendingPathComponent:@(name.c_str())] atomically:YES])throw std::runtime_error("Cannot save restoration readback");};
   auto pause=[](unsigned ms){std::this_thread::sleep_for(std::chrono::milliseconds(ms));};
   status(@"restoring");
-  try{VirusRework::restoreSnapshot(midi,original,save,pause);}catch(...){midi.savePrivate(output);throw;}
-  midi.savePrivate(output);status(@"restored");std::cerr<<"All 16 parts, Single buffer and multi verified; Single mode sent; USB normalized\n";
+  try{VirusRework::restoreSnapshot(midi,original,save,pause,original.model==VirusRework::DeviceModel::ti16);}catch(...){midi.savePrivate(output);throw;}
+  midi.savePrivate(output);status(@"restored");std::cerr<<"All "<<VirusRework::partCount(original.model)<<" parts, Single buffer and multi verified; Single mode sent; USB normalized\n";
   // Device objects and lock are released by process exit after the evidence is durable.
   return 0;
  }catch(const std::exception& e){std::cerr<<e.what()<<"\n";try{status(@"failed",@(e.what()));}catch(...){}return 1;}

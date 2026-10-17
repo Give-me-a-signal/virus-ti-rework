@@ -36,6 +36,7 @@ public:
 #ifdef VIRUS_REWORK_TEST
  static bool testCaptureUnderrunFallback(); // synthetic FIFO exhaustion; no device I/O
 #endif
+ unsigned activePartCount() const noexcept;
 private:
  struct Impl;
  std::unique_ptr<Impl> impl;

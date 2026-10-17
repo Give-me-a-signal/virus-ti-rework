@@ -3,7 +3,7 @@
  using namespace Skin;Palette p(darkTheme);box(self.bounds,p.base,nil,0);
  text(@"VIRUS",NSMakeRect(14,8,99,28),25,p.text,NO,NSFontWeightHeavy);
  text(@"TI",NSMakeRect(108,9,35,28),25,p.accent,NO,NSFontWeightLight);
- text(darkTheme?@"D A R K  /  1 6  P A R T S":@"P O L A R  /  1 6  P A R T S",NSMakeRect(15,35,175,10),6.5,p.muted);
+ text(controller->hardwarePartCount==4?@"S N O W  /  4  P A R T S":darkTheme?@"D A R K  /  1 6  P A R T S":@"P O L A R  /  1 6  P A R T S",NSMakeRect(15,35,175,10),6.5,p.muted);
  line(NSMakePoint(196,49),NSMakePoint(196,467),p.line,.7);
  for(unsigned part=0;part<16;++part){double y=51+part*26;bool selected=part==selectedPart;box(NSMakeRect(10,y,177,24),selected?p.raised:p.panel,p.line,3);if(selected)box(NSMakeRect(10,y+4,2,16),p.accent,nil,1);}
  if(model[@"project_owned"]){

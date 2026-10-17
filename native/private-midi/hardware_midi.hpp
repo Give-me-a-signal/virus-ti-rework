@@ -9,27 +9,30 @@
 #include <vector>
 #include "private_usb.hpp"
 #include "dump_transaction.h"
+#include "../vst3/device_profile.h"
+#include "../device-identity/include/virus/device_identity.hpp"
 #include "../vst3/midi_safety.h"
 namespace virus::hardware {
 inline void check(OSStatus s,const char* op){if(s)throw std::runtime_error(std::string(op)+": "+std::to_string(s));}
 inline std::string midiName(MIDIObjectRef o){CFStringRef s=nullptr;MIDIObjectGetStringProperty(o,kMIDIPropertyDisplayName,&s);if(!s)return {};std::string r=[(__bridge NSString*)s UTF8String];CFRelease(s);return r;}
 class Midi {
  MIDIClientRef client=0;MIDIPortRef input=0,output=0;MIDIEndpointRef destination=0,source=0,externalSource=0;
+ bool snowTest=false;
  std::mutex requestLock;
  std::mutex lock;std::array<std::vector<uint8_t>,2> assembling;std::vector<std::vector<uint8_t>> messages;std::vector<std::string> origins;
  std::unique_ptr<virus::private_midi::PrivateUSB> privateUSB;
  static void callback(const MIDIPacketList* list,void* context,void* sourceContext){auto* self=static_cast<Midi*>(context);std::lock_guard<std::mutex> guard(self->lock);auto& assembly=self->assembling[sourceContext?1:0];auto* p=&list->packet[0];for(UInt32 n=0;n<list->numPackets;n++,p=MIDIPacketNext(p))for(UInt16 i=0;i<p->length;i++){uint8_t b=p->data[i];if(b>=0xf8)continue;if(b==0xf0)assembly.clear();if(b==0xf0||!assembly.empty()){if(assembly.size()<65536)assembly.push_back(b);if(b==0xf7){self->messages.push_back(assembly);self->origins.push_back("CoreMIDI public");assembly.clear();}}}}
 public:
- Midi(){for(ItemCount i=0;i<MIDIGetNumberOfDestinations();i++){auto e=MIDIGetDestination(i);if(midiName(e)=="Virus TI USB Plugin I/O"){if(destination)throw std::runtime_error("Ambiguous MIDI destination");destination=e;}}for(ItemCount i=0;i<MIDIGetNumberOfSources();i++){auto e=MIDIGetSource(i);if(midiName(e)=="Virus TI USB Plugin I/O"){if(source)throw std::runtime_error("Ambiguous MIDI source");source=e;}if(midiName(e)=="Virus TI USB External I/O")externalSource=e;}if(!source||!destination)throw std::runtime_error("Virus plugin MIDI port absent");check(MIDIClientCreate(CFSTR("Virus bench no-firmware"),nullptr,nullptr,&client),"MIDI client");check(MIDIInputPortCreate(client,CFSTR("Virus bench input"),callback,this,&input),"MIDI input");check(MIDIOutputPortCreate(client,CFSTR("Virus bench output"),&output),"MIDI output");check(MIDIPortConnectSource(input,source,nullptr),"MIDI connect");if(externalSource)check(MIDIPortConnectSource(input,externalSource,reinterpret_cast<void*>(1)),"External MIDI receive connect");}
+ explicit Midi(bool snow=false):snowTest(snow){for(ItemCount i=0;i<MIDIGetNumberOfDestinations();i++){auto e=MIDIGetDestination(i);if(virus::identity::midiPort(midiName(e))==virus::identity::MidiPort::plugin){if(destination)throw std::runtime_error("Ambiguous MIDI destination");destination=e;}}for(ItemCount i=0;i<MIDIGetNumberOfSources();i++){auto e=MIDIGetSource(i);if(virus::identity::midiPort(midiName(e))==virus::identity::MidiPort::plugin){if(source)throw std::runtime_error("Ambiguous MIDI source");source=e;}if(virus::identity::midiPort(midiName(e))==virus::identity::MidiPort::external){if(externalSource)throw std::runtime_error("Ambiguous external MIDI source");externalSource=e;}}if(!source||!destination)throw std::runtime_error("Virus TI plugin MIDI port absent; a compatible CoreMIDI driver/Plugin I/O source or destination is missing. Check Audio MIDI Setup > MIDI Studio and report driver/version (issue #8).");check(MIDIClientCreate(CFSTR("Virus bench no-firmware"),nullptr,nullptr,&client),"MIDI client");check(MIDIInputPortCreate(client,CFSTR("Virus bench input"),callback,this,&input),"MIDI input");check(MIDIOutputPortCreate(client,CFSTR("Virus bench output"),&output),"MIDI output");check(MIDIPortConnectSource(input,source,nullptr),"MIDI connect");if(externalSource)check(MIDIPortConnectSource(input,externalSource,reinterpret_cast<void*>(1)),"External MIDI receive connect");}
  ~Midi(){privateUSB.reset();if(input){MIDIPortDisconnectSource(input,source);if(externalSource)MIDIPortDisconnectSource(input,externalSource);MIDIPortDispose(input);}if(output)MIDIPortDispose(output);if(client)MIDIClientDispose(client);}
- void usePrivate(){privateUSB=std::make_unique<virus::private_midi::PrivateUSB>();privateUSB->startReader([this](const std::vector<uint8_t>& m){std::lock_guard<std::mutex> g(lock);messages.push_back(m);origins.push_back("hidden interface IN");});}
+ void usePrivate(bool snow=false){privateUSB=std::make_unique<virus::private_midi::PrivateUSB>(snow);privateUSB->startReader([this](const std::vector<uint8_t>& m){std::lock_guard<std::mutex> g(lock);messages.push_back(m);origins.push_back("hidden interface IN");});}
  uint64_t registryID()const{return privateUSB?privateUSB->registryID:0;}
  void savePrivate(NSString* dir){if(privateUSB){privateUSB->saveTraffic(dir);if(!privateUSB->readerError().empty())throw std::runtime_error(privateUSB->readerError());}}
  void request(uint8_t command,uint8_t program=0x40){if(command!=0x30&&command!=0x31&&command!=0x35)throw std::runtime_error("Read-request allowlist");send({0xf0,0,0x20,0x33,1,0x10,command,0,program,0xf7});}
- void sendTimed(const std::vector<uint8_t>& bytes,uint16_t stamp,bool clock=false){if(!privateUSB)throw std::runtime_error("Timed MIDI requires private interface ownership");privateUSB->sendTimed(bytes,stamp,clock);}
- void sendTimedBatch(const std::vector<VirusRework::TimedMessage>& batch){if(!privateUSB)throw std::runtime_error("Timed MIDI requires private interface ownership");privateUSB->sendTimedBatch(batch);}
+ void sendTimed(const std::vector<uint8_t>& bytes,uint16_t stamp,bool clock=false){if(snowTest)throw std::runtime_error("Snow marker timing is unverified and disabled");if(!privateUSB)throw std::runtime_error("Timed MIDI requires private interface ownership");privateUSB->sendTimed(bytes,stamp,clock);}
+ void sendTimedBatch(const std::vector<VirusRework::TimedMessage>& batch){if(snowTest)throw std::runtime_error("Snow marker timing is unverified and disabled");if(!privateUSB)throw std::runtime_error("Timed MIDI requires private interface ownership");privateUSB->sendTimedBatch(batch);}
  void send(const std::vector<uint8_t>& data){
-  VirusRework::validateMidi(data);
+  VirusRework::validateDeviceMidi(data,snowTest);
   if(privateUSB){privateUSB->sendMessage(data);return;}
   std::array<uint8_t,4096> storage{};auto* list=(MIDIPacketList*)storage.data();auto* p=MIDIPacketListInit(list);if(!MIDIPacketListAdd(list,sizeof(storage),p,0,data.size(),data.data()))throw std::runtime_error("MIDI packet too large");check(MIDISend(output,destination,list),"MIDI send");
  }

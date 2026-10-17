@@ -234,6 +234,22 @@ int main() {
  sixteenSaved.seek(0,IBStream::kIBSeekSet,nullptr);CHECK(c.setComponentState(&sixteenSaved)==kResultOk);
  for(unsigned part=0;part<16;++part)CHECK(c.hardwarePatches.parts[part]==expected.parts[part]);
  for(size_t size=12+2672*12;size<sixteen.size();++size){MemoryStream truncated(sixteen.data(),size);CHECK(restored.setState(&truncated)==kResultFalse);}
+ // A four-part project's inactive slots remain empty in the existing v3
+ // format. Ten real processor/controller round trips must not append records,
+ // populate parts 5–16, change routing or connect to hardware while dormant.
+ sixteen=raw;sixteen.resize(12+2672*12);u32(0);u32(16);
+ for(unsigned part=0;part<16;++part)blob(part<4?expected.parts[part]:PatchBytes{});
+ blob(multi);
+ for(unsigned repeat=0;repeat<10;++repeat){
+  MemoryStream input(sixteen.data(),sixteen.size());CHECK(restored.setState(&input)==kResultOk);
+  MemoryStream saved;CHECK(restored.getState(&saved)==kResultOk);
+  CHECK(saved.getSize()==156+2672*12+4*524+267);
+  saved.seek(0,IBStream::kIBSeekSet,nullptr);CHECK(c.setComponentState(&saved)==kResultOk);
+  for(unsigned part=0;part<16;++part)CHECK(c.hardwarePatches.parts[part]==(part<4?expected.parts[part]:PatchBytes{}));
+  CHECK(c.hardwarePatches.multi==multi);
+  if(repeat)CHECK(sixteen.size()==size_t(saved.getSize())&&std::memcmp(sixteen.data(),saved.getData(),sixteen.size())==0);
+  sixteen.assign(saved.getData(),saved.getData()+saved.getSize());
+ }
  // A separate processor does not inherit this instance's saved patch.
  MemoryStream isolated;CHECK(p.getState(&isolated)==kResultOk);CHECK(isolated.getSize()==156+2672*12);
  ParamID id=0;CHECK(c.getMidiControllerAssignment(0,15,1,id)==kResultTrue);CHECK(c.getMidiControllerAssignment(0,16,1,id)==kResultFalse);CHECK(c.getMidiControllerAssignment(1,0,1,id)==kResultFalse);CHECK(c.getMidiControllerAssignment(0,0,kPitchBend,id)==kResultFalse);
