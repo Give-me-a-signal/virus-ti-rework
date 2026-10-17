@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Package only native project code and permitted dependency notices."""
-import argparse, hashlib, json, pathlib, shutil, subprocess
+import argparse, hashlib, json, pathlib, re, shutil, subprocess
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 VERSION = '0.2.0-beta.1'
@@ -17,6 +17,10 @@ def main():
     parser.add_argument('build', type=pathlib.Path)
     args = parser.parse_args()
     build = args.build.resolve()
+    flag = re.search(r'^VTR_TIMING_DAW_TEST_BUILD:[^=]+=(.*)$', (build/'CMakeCache.txt').read_text(), re.M)
+    value = flag[1].strip().upper() if flag else 'OFF'
+    if value not in ('', '0', 'OFF', 'NO', 'FALSE', 'N', 'IGNORE', 'NOTFOUND') and not value.endswith('-NOTFOUND'):
+        raise SystemExit('Refusing to package an experimental timing DAW test build')
     output = ROOT/'dist'/f'Virus-TI-Rework-{VERSION}-macOS-arm64'
     if output.exists():
         shutil.rmtree(output)

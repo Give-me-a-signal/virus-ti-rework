@@ -12,6 +12,7 @@
 #include <array>
 #include "usb_midi1.hpp"
 #include "virus/usb_descriptors.hpp"
+#include "../vst3/timed_midi.h"
 
 namespace virus::private_midi {
 inline int number(io_service_t service,CFStringRef key){id v=CFBridgingRelease(IORegistryEntryCreateCFProperty(service,key,kCFAllocatorDefault,0));if(![v isKindOfClass:NSNumber.class])throw std::runtime_error("Missing USB identity property");return [v intValue];}
@@ -101,6 +102,17 @@ public:
   if(midi::encode_usb_midi1_message(2,bytes.data(),bytes.size(),packets.data(),packets.size(),n)!=midi::USBMidiResult::ok)throw std::runtime_error("Invalid private message");
   auto* p=reinterpret_cast<const uint8_t*>(packets.data());
   for(size_t pos=0;pos<n*4;pos+=32){std::vector<uint8_t> fragment(p+pos,p+std::min(pos+32,n*4));transfer(out_,fragment,1000,false);std::lock_guard<std::mutex> g(logLock_);rawWrites_.push_back(fragment);}
+ }
+ void sendTimed(const std::vector<uint8_t>& bytes,uint16_t stamp,bool clock=false){
+  sendTimedBatch({{bytes,stamp,clock}});
+ }
+ void sendTimedBatch(const std::vector<VirusRework::TimedMessage>& batch){
+  const auto packets=VirusRework::timedBatchPackets(batch);
+  std::lock_guard<std::mutex> writer(writeLock_);
+  for(size_t pos=0;pos<packets.size();pos+=32){
+   std::vector<uint8_t> fragment(packets.begin()+pos,packets.begin()+std::min(pos+32,packets.size()));
+   transfer(out_,fragment,1000,false);std::lock_guard<std::mutex> g(logLock_);rawWrites_.push_back(fragment);
+  }
  }
  void saveTraffic(NSString* directory){stopReader();std::lock_guard<std::mutex> g(logLock_);NSMutableData* reads=[NSMutableData data];NSMutableData* writes=[NSMutableData data];for(auto& p:rawReads_)[reads appendBytes:p.data() length:p.size()];for(auto& p:rawWrites_)[writes appendBytes:p.data() length:p.size()];[reads writeToFile:[directory stringByAppendingPathComponent:@"private-in.bin"] atomically:YES];[writes writeToFile:[directory stringByAppendingPathComponent:@"private-out.bin"] atomically:YES];}
  PrivateUSB(const PrivateUSB&)=delete;PrivateUSB& operator=(const PrivateUSB&)=delete;

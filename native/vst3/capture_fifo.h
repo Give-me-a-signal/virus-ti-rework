@@ -17,10 +17,11 @@ class CaptureFIFO {
  double phase=0,step=1,correction=0;
  bool primed=false;
  std::atomic<unsigned> requestedTarget{2048};
+ std::atomic<int64_t> suppressedMarker{-1};
  unsigned target=2048;
 public:
  std::atomic<uint64_t> overruns{0},underruns{0},rendered{0};
- void setTarget(unsigned frames) noexcept {requestedTarget.store(std::clamp(frames,2048u,8192u));}
+ void setTarget(unsigned frames) noexcept {requestedTarget.store(std::clamp(frames,2048u,16384u));}
  void setup(double rate) { // consumer quiescent
   step=48000./rate;
   const double cutoff=.94*std::min(1.,rate/48000.);
@@ -38,11 +39,28 @@ public:
   resetConsumer();
  }
  void resetConsumer() noexcept {cursor=written.load(std::memory_order_acquire);read.store(cursor,std::memory_order_release);phase=0;correction=0;primed=false;}
- void push(const float* src,unsigned count) noexcept {
+ uint64_t newest()const noexcept{return written.load(std::memory_order_acquire);}
+ void suppressCalibrationMarker(int64_t frame)noexcept{suppressedMarker.store(frame,std::memory_order_release);}
+ double position()const noexcept{return double(cursor)+phase+31;}
+ double increment()const noexcept{return step*(1+correction);}
+ bool ready()const noexcept{return primed;}
+ bool push(const float* src,unsigned count) noexcept {
   auto w=written.load(std::memory_order_relaxed);auto r=read.load(std::memory_order_acquire);
-  if(count>capacity-(w-r)){++overruns;return;}
+  if(count>capacity-(w-r)){++overruns;return false;}
   for(unsigned f=0;f<count;f++)for(unsigned c=0;c<6;c++)data[(w+f)&(capacity-1)][c]=std::isfinite(src[f*6+(c+2)%6])?src[f*6+(c+2)%6]:0;
   written.store(w+count,std::memory_order_release);
+  return true;
+ }
+ // Same sinc kernel and six-channel order, now driven by the shared device
+ // timeline. desired is the center sample, so include the kernel look-ahead.
+ void beginAlignedBlock(double desired)noexcept{
+  const auto w=written.load(std::memory_order_acquire);
+  double start=desired-31;
+  if(!std::isfinite(start)||start<0||start+taps>=double(w)){primed=false;return;}
+  double err=start-(double(cursor)+phase);
+  if(!primed||std::abs(err)>2048){cursor=uint64_t(start);phase=start-double(cursor);correction=0;primed=true;}
+  else correction=std::clamp(err/(64.*std::max(1.,step*256.)),-.002,.002);
+  read.store(cursor,std::memory_order_release);
  }
  void beginBlock(bool active) noexcept {
   auto desiredTarget=requestedTarget.load();if(target!=desiredTarget){target=desiredTarget;resetConsumer();}
@@ -59,7 +77,8 @@ public:
   if(written.load(std::memory_order_acquire)-cursor<taps+unsigned(std::ceil(step))+1){++underruns;primed=false;return false;}
   const auto& coeff=kernel[std::min(unsigned(phase*phases),phases-1)];
   for(unsigned c=0;c<6;c++){
-   double v=0;for(unsigned k=0;k<taps;k++)v+=data[(cursor+k)&(capacity-1)][c]*coeff[k];
+   double v=0;const auto marker=suppressedMarker.load(std::memory_order_acquire);
+   for(unsigned k=0;k<taps;k++)if(!(marker>=0&&(c==2||c==3)&&(cursor+k==uint64_t(marker)||cursor+k==uint64_t(marker)+1)))v+=data[(cursor+k)&(capacity-1)][c]*coeff[k];
    out[c]=int32_t(std::clamp(v*2147483648.,-2147483648.,2147483647.));
   }
   phase+=step*(1+correction);auto advance=uint64_t(phase);cursor+=advance;phase-=advance;

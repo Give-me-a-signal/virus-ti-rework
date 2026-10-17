@@ -9,6 +9,8 @@
 #include "device_lease.h"
 #include "recall_policy.h"
 #include "restoration.h"
+#include "performance_queue.h"
+#include "../clock-sync/include/virus/marker_clock.hpp"
 #include <dlfcn.h>
 #include "../private-midi/hardware_midi.hpp"
 #include <sys/file.h>
@@ -24,6 +26,11 @@ namespace VirusRework {
 using virus::hardware::Midi;
 using virus::hardware::check;
 namespace {
+#ifdef VTR_TIMING_DAW_TEST_BUILD
+constexpr bool timingDawTestBuild=true;
+#else
+constexpr bool timingDawTestBuild=false;
+#endif
 NSString* resources(){auto root=[[NSBundle bundleForClass:VTRHardwareBundleMarker.class]resourcePath];
 #ifdef VTR_BUNDLE_RESOURCES
  if(![[NSFileManager defaultManager]fileExistsAtPath:[root stringByAppendingPathComponent:@"PatchBanks"]])root=@VTR_BUNDLE_RESOURCES;
@@ -35,6 +42,8 @@ class HardwareMidi final:public DeviceSession{
 public:
  HardwareMidi(){midi.usePrivate();}
  void send(const PatchBytes& p)override{midi.send(p);}
+ void sendTimed(const PatchBytes& p,uint16_t stamp,bool clock)override{midi.sendTimed(p,stamp,clock);}
+ void sendTimedBatch(const std::vector<TimedMessage>& batch)override{midi.sendTimedBatch(batch);}
  PatchBytes single(uint8_t part,const std::function<void()>& idle)override{return midi.single(part,idle);}
  PatchBytes multi()override{return midi.multi();}
  void saveTraffic(const std::string& path)override{midi.savePrivate(@(path.c_str()));}
@@ -61,6 +70,22 @@ void checksum(std::vector<uint8_t>& p){unsigned sum=0;for(size_t i=5;i<265;i++)s
 struct HardwareService::Impl {
  virus::bridge::DeviceBridge& bridge;
  CaptureFIFO capture;
+ virus::clock::MarkerDetector marker;
+ virus::clock::MarkerTimeline timeline;
+ std::atomic<virus::clock::SyncState> syncState{virus::clock::SyncState::inactive};
+ // Hardware acceptance must pass before changing this default. The private
+ // bench opts in explicitly; ordinary installations keep immediate delivery.
+ bool timingEnabled=[] {auto* option=std::getenv("VTR_ENABLE_MARKER_TIMING");return option?std::string(option)=="1":timingDawTestBuild;}();
+ PerformanceQueue performance;
+ std::atomic<uint64_t> lateEvents{0};
+ std::atomic<bool> panicPending{false};
+ uint64_t lastWorkerGeneration=0;
+ unsigned blockSamples=0,eventOrder=0;
+ double blockStart=0,blockStep=1,blockTempo=120,blockBeats=0,nextClock=0;
+ bool blockPlaying=false,blockBeatsValid=false,blockCanSend=false,blockLocked=false,clockAnchored=false;
+ uint64_t audioGeneration=0;
+ uint64_t handledUnderruns=0; // audio consumer only
+
  USBMeters usbMeters;
  MIDIActivity midiActivity;
  std::array<std::atomic<uint8_t>,16> partVolumes;
@@ -84,6 +109,7 @@ struct HardwareService::Impl {
  bool snapshotFailed=false;
  std::string text="Disconnected · Start with TI in Single mode";
  std::atomic<double> rate{48000};
+ std::atomic<unsigned> reportedLatency{2048};
  bool consumerLive=false;
  std::unique_ptr<DeviceSession> midi;
  RestorationGuard restoration;
@@ -202,9 +228,11 @@ struct HardwareService::Impl {
    }
   }catch(const std::exception& e){result[@"ok"]=@NO;result[@"error"]=@(e.what());}
   {std::lock_guard<std::mutex> g(stateLock);result[@"status"]=@(text.c_str());result[@"snapshot_directory"]=@(snapshotDirectory.c_str());result[@"preset_name"]=@(presetName.c_str());result[@"last_command_succeeded"]=@(lastSucceeded);}
+  result[@"timing_enabled"]=@(timingEnabled);result[@"timing_status"]=@(virus::clock::syncName(syncState.load()));result[@"timing_marker_frame"]=@(marker.validMarker());result[@"timing_overflow"]=@(performance.overflow.load());result[@"timing_late_events"]=@(lateEvents.load());result[@"performance_dropped"]=@(performance.dropped.load());result[@"automation_coalesced"]=@(performance.coalesced.load());
   result[@"device_lease_held"]=@(leaseHeld.load());result[@"connected"]=@(live.load());result[@"busy"]=@(busy.load());result[@"completed_request_id"]=@(completed.load());
   result[@"state_recall_pending"]=@(recallPending.load());result[@"state_format"]=@3;result[@"backend"]=emulator?@"emulator":@"hardware";
   {std::lock_guard<std::mutex> g(stateLock);NSMutableArray* parts=[NSMutableArray array];for(unsigned p=0;p<16;++p){auto& bytes=staged.parts[p].empty()?loaded.parts[p]:staged.parts[p];[parts addObject:@{@"part":@(p+1),@"name":bytes.empty()?@"":@(virus::patches::parse_single(bytes).name.c_str()),@"bytes":@(bytes.size())}];}result[@"parts"]=parts;}
+  result[@"reported_latency_samples"]=@(reportedLatency.load());result[@"timing_daw_test_build"]=@(timingDawTestBuild);
   result[@"host_processing"]=@(hostProcessing.load());result[@"host_sample_rate"]=@(rate.load());result[@"device_sample_rate"]=@48000;
   result[@"firmware_operations_supported"]=@NO;result[@"stored_bank_writes_supported"]=@NO;
   result[@"lifetime_counters"]=@{@"capture_callbacks":@(callbacks.load()),@"capture_errors":@(invalidCapture.load()),@"fifo_overruns":@(capture.overruns.load()),@"fifo_underruns":@(capture.underruns.load()),@"rendered_frames":@(capture.rendered.load()),@"midi_sent":@(notesSent.load())};
@@ -220,16 +248,19 @@ struct HardwareService::Impl {
  static OSStatus audio(AudioDeviceID,const AudioTimeStamp*,const AudioBufferList* input,const AudioTimeStamp*,AudioBufferList*,const AudioTimeStamp*,void* ref){
   auto& s=*static_cast<Impl*>(ref);++s.callbacks;
   // This is capture-only. Do not write the DAW's audio output buffers.
-  if(!input||input->mNumberBuffers!=1||input->mBuffers[0].mNumberChannels!=6||!input->mBuffers[0].mData||input->mBuffers[0].mDataByteSize%24){++s.invalidCapture;return noErr;}
+  if(!input||input->mNumberBuffers!=1||input->mBuffers[0].mNumberChannels!=6||!input->mBuffers[0].mData||input->mBuffers[0].mDataByteSize%24){++s.invalidCapture;s.marker.disarm();if(s.syncState.exchange(virus::clock::SyncState::degraded)==virus::clock::SyncState::locked)s.panicPending=true;return noErr;}
   auto* samples=static_cast<const float*>(input->mBuffers[0].mData);auto frames=input->mBuffers[0].mDataByteSize/24;
   for(unsigned c=0;c<6;c++){float peak=s.rawPeak[c].load(std::memory_order_relaxed);for(unsigned f=0;f<frames;f++)if(std::isfinite(samples[f*6+c]))peak=std::max(peak,std::abs(samples[f*6+c]));s.rawPeak[c].store(peak,std::memory_order_relaxed);}
-  s.usbMeters.push(samples,frames);s.capture.push(samples,frames);return noErr;
+  auto first=s.capture.newest();
+  if(s.capture.push(samples,frames)){s.marker.feed(samples,frames,first);auto found=s.marker.validMarker();if(found>=0)s.capture.suppressCalibrationMarker(found);}
+  else {s.marker.disarm();s.syncState=virus::clock::SyncState::degraded;s.panicPending=true;}
+  s.usbMeters.push(samples,frames);return noErr;
  }
  void save(NSString* name,const std::vector<uint8_t>& bytes){if(![[NSData dataWithBytes:bytes.data() length:bytes.size()]writeToFile:[directory stringByAppendingPathComponent:name] atomically:YES])throw std::runtime_error("Cannot save hardware snapshot");}
  void pause(unsigned milliseconds){auto end=std::chrono::steady_clock::now()+std::chrono::milliseconds(milliseconds);do{if(live)drainMidi();std::this_thread::sleep_for(std::chrono::milliseconds(2));}while(std::chrono::steady_clock::now()<end);}
  static void emulatorAudio(void* context,const float* samples,unsigned frames){auto& self=*static_cast<Impl*>(context);if(!self.live)return;++self.callbacks;self.usbMeters.push(samples,frames);self.capture.push(samples,frames);for(unsigned c=0;c<6;++c){float peak=self.rawPeak[c];for(unsigned f=0;f<frames;++f)peak=std::max(peak,std::abs(samples[f*6+c]));self.rawPeak[c]=peak;}}
  void connect(){
-  outputReady=false;
+  outputReady=false;syncState=virus::clock::SyncState::preparing;
   status(emulator?"Booting OsTIrus TI emulator…":"Connecting TI · preserving all 16 edit buffers…");
   NSString* base=[NSHomeDirectory() stringByAppendingPathComponent:@"Library/Application Support/VirusTIRework"];
   NSError* error=nil;if(![[NSFileManager defaultManager]createDirectoryAtPath:base withIntermediateDirectories:YES attributes:nil error:&error])throw std::runtime_error("Cannot create snapshot directory");
@@ -254,7 +285,7 @@ struct HardwareService::Impl {
    AudioObjectPropertyAddress property{kAudioDevicePropertyIOProcStreamUsage,kAudioDevicePropertyScopeOutput,kAudioObjectPropertyElementMain};
    check(AudioObjectSetPropertyData(device,&property,0,nullptr,sizeof(usage),&usage),"Set capture-only stream usage");
   }
-  capture.setTarget(emulator?8192:2048);
+  capture.setTarget(emulator?8192:timingEnabled?timeline.latencyDevice():2048);
   dirty=true;sendMidi({0xf0,0,0x20,0x33,1,16,0x73,0,122,3,0xf7});pause(350);
   // Original Global USB / Virus Control USB IO Configuration: 1 = three
   // synth returns, no input. CoreAudio's first pair otherwise carries input.
@@ -265,12 +296,14 @@ struct HardwareService::Impl {
   if(desired.multi.empty())for(unsigned p=0;p<16;++p){routing[73+p]=p;routing[89+p]=0;routing[105+p]=127;routing[153+p]=127;routing[169+p]=127;routing[185+p]=10;routing[249+p]|=1;}
   multiChecksum(routing);sendMidi(routing);pause(multiSettleMs);
   auto actualMulti=midi->multi();verifyMultiRecall(routing,actualMulti);{std::lock_guard<std::mutex> g(stateLock);loaded.multi=actualMulti;}
+  const auto callbacksBeforeStart=callbacks.load(),framesBeforeStart=capture.newest();
   if(!emulator)check(AudioDeviceStart(device,proc),"Start TI capture");live=true;
   for(unsigned p=0;p<16;++p){auto source=desired.parts[p].empty()?(p==0?single:original.parts[p]):desired.parts[p];load(source,p);}
+  if(!emulator&&(callbacks.load()==callbacksBeforeStart||capture.newest()==framesBeforeStart))throw std::runtime_error("No TI capture callbacks; check host microphone permission and audio availability");
   replayVolumes();{std::lock_guard<std::mutex> g(stateLock);staged={};}
   // The TI can emit an initialization transient while routing/edit buffers settle.
   // Keep the host silent until preparation completes; beginBlock then re-primes.
-  usbMeters.clear();outputReady=true;
+  usbMeters.clear();calibrateClock();outputReady=true;
   status(emulator?"Emulator connected · 16 parts · MIDI channels 1–16":"Connected · 16 parts · MIDI channels 1–16");
  }
  PatchBytes presetReadback(unsigned part,bool serviceMidi=false){
@@ -294,7 +327,52 @@ struct HardwareService::Impl {
  }
  void testTone(unsigned part){auto path=[resources() stringByAppendingPathComponent:@"Hardware/stock-wavetable-probe.syx"];NSData* data=[NSData dataWithContentsOfFile:path];if(data.length!=524)throw std::runtime_error("Stock test patch resource absent");auto* p=static_cast<const uint8_t*>(data.bytes);load(PatchBytes(p,p+524),part);}
  void route(unsigned part,uint8_t output){sendMidi({0xf0,0,0x20,0x33,1,16,0x72,uint8_t(part),41,output,0xf7});auto current=midi->multi();validateMulti(current);if(current[185+part]!=output)throw std::runtime_error("Part routing verification failed");std::lock_guard<std::mutex> g(stateLock);loaded.multi=current;}
+ void calibrateClock(){
+  using namespace virus::clock;
+  marker.disarm();
+  if(!timingEnabled||emulator){syncState=SyncState::degraded;return;}
+  syncState=SyncState::calibrating;
+  for(unsigned attempt=0;attempt<3&&!stop;++attempt){
+   auto quietDeadline=std::chrono::steady_clock::now()+std::chrono::seconds(6);
+   while(!stop&&capture.newest()-std::min(capture.newest(),marker.lastSound.load())<48000){
+    if(std::chrono::steady_clock::now()>=quietDeadline){syncState=SyncState::degraded;return;}pause(10);
+   }
+   if(stop){syncState=SyncState::inactive;return;}
+   marker.arm();const auto newest=capture.newest();
+   auto initial=uint16_t((newest-5120)&16383);
+   midi->sendTimed(clockMessage(ClockCommand::activeSense),initial,true);
+   midi->sendTimed(clockMessage(ClockCommand::songPosition),initial,true);
+   midi->sendTimed(clockMessage(ClockCommand::calibrationPing),3072,true);
+   const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(5);
+   while(!stop&&std::chrono::steady_clock::now()<deadline){
+    if(marker.validMarker()>=0){syncState=SyncState::locked;return;}pause(10);
+   }
+   marker.disarm();
+  }
+  syncState=SyncState::degraded;
+ }
+ void drainPerformance(){
+  auto generation=bridge.generation();
+  bool changed=lastWorkerGeneration&&lastWorkerGeneration!=generation;lastWorkerGeneration=generation;
+  bool unsafe=panicPending.exchange(false)|performance.panic.exchange(false);if(unsafe)bridge.serviceDisconnect();
+  if((changed||unsafe)&&midi&&live){for(unsigned p=0;p<16;++p){sendMidi({uint8_t(0xb0|p),64,0});sendMidi({uint8_t(0xb0|p),123,0});}}
+  std::array<PerformanceEvent,4096> ready{};auto count=performance.take(ready.data(),ready.size());
+  std::stable_sort(ready.begin(),ready.begin()+count,PerformanceQueue::before);
+  std::vector<TimedMessage> batch;batch.reserve(32);
+  auto flush=[&]{if(!batch.empty()){midi->sendTimedBatch(batch);batch.clear();}};
+  for(unsigned i=0;i<count;++i){const auto& e=ready[i];
+   if(unsafe||!bridge.ready()||!live||!outputReady||!hostProcessing||e.generation!=generation||int(e.bytes[0]&15)==mutedPart){++performance.dropped;continue;}
+   PatchBytes bytes=e.clock?(e.bytes[0]==0xf2?PatchBytes(e.bytes.begin(),e.bytes.end()):PatchBytes{e.bytes[0]}):PatchBytes(e.bytes.begin(),e.bytes.end());
+   if(e.frame>=0&&syncState.load()==virus::clock::SyncState::locked){uint16_t stamp=0;
+    if(virus::clock::MarkerTimeline::stamp(e.frame,marker.validMarker(),capture.newest(),stamp)){batch.push_back({bytes,stamp,e.clock});if(batch.size()==32)flush();}
+    else{++lateEvents;if(!e.clock){auto type=e.bytes[0]&0xf0;if(type==0x80||(type==0x90&&e.bytes[2]==0)){flush();sendMidi(bytes);}else ++performance.dropped;}continue;}
+   }else if(!e.clock){flush();sendMidi(bytes);}
+   if(!e.clock){++notesSent;midiActivity.midi(bytes.data(),bytes.size());if((bytes[0]&0xf0)==0xb0&&bytes[1]==7)partVolumes[bytes[0]&15]=bytes[2];}
+  }
+  flush();
+ }
  void drainMidi(){
+  drainPerformance();
   if(!outputReady.load())return; // discard this generation at transaction boundaries
   virus::bridge::MidiMessage event;unsigned budget=2048;
   while(budget--&&bridge.serviceTakeMidi(event)){
@@ -320,7 +398,7 @@ struct HardwareService::Impl {
   std::string errors;auto attempt=[&](auto action){try{action();}catch(const std::exception& e){errors+=std::string(e.what())+"; ";}};
   if(live&&!closing)attempt([&]{snapshot();std::lock_guard<std::mutex> g(stateLock);if(staged.empty())staged=loaded;});
   closing=closing||stop.load();
-  outputReady=false;if(live.exchange(false))bridge.serviceDisconnect();
+  outputReady=false;marker.disarm();syncState=virus::clock::SyncState::inactive;if(live.exchange(false))bridge.serviceDisconnect();
   if(proc){attempt([&]{check(AudioDeviceStop(device,proc),"Stop TI capture");});attempt([&]{check(AudioDeviceDestroyIOProcID(device,proc),"Destroy TI capture");});proc=nullptr;}
   if(closing&&restoration.armed()){
    if(midi&&directory)attempt([&]{midi->saveTraffic(directory.fileSystemRepresentation);});midi.reset();dirty=false;
@@ -344,21 +422,24 @@ struct HardwareService::Impl {
    if(!op&&recallPending&&hostProcessing){std::lock_guard<std::mutex> g(commandLock);if(!busy.exchange(true)){op=7;++submitted;recallPending=false;}}
    try{
    if(op==1&&!live)connect();else if(op==2||op==8)disconnect(stop.load());else if(op==3)testTone(pendingPart);else if(op==4)load(pendingPreset,pendingPart);
-   else if(op==5)snapshot();else if(op==6){sendMidi(pendingPreset);++notesSent;}
+   else if(op==5)snapshot();else if(op==6){
+    uint16_t stamp=0;auto target=double(capture.newest())+virus::clock::MarkerTimeline::transmitLead;
+    if(syncState.load()==virus::clock::SyncState::locked&&virus::clock::MarkerTimeline::stamp(target,marker.validMarker(),capture.newest(),stamp))midi->sendTimed(pendingPreset,stamp,false);else sendMidi(pendingPreset);++notesSent;
+   }
    else if(op==9)route(pendingPart,pendingPreset.at(0));
    else if(op==7){if(!live)connect();else{outputReady=false;bridge.serviceDisconnect();
     for(unsigned p=0;p<16;++p){sendMidi({uint8_t(0xb0|p),64,0});sendMidi({uint8_t(0xb0|p),123,0});}
     ProjectPatches desired;{std::lock_guard<std::mutex> g(stateLock);desired=staged;}
     if(!desired.multi.empty()){sendMidi(desired.multi);pause(multiSettleMs);auto m=midi->multi();verifyMultiRecall(desired.multi,m);std::lock_guard<std::mutex> g(stateLock);loaded.multi=m;}
     for(unsigned p=0;p<16;++p)if(!desired.parts[p].empty())load(desired.parts[p],p);
-    replayVolumes();{std::lock_guard<std::mutex> g(stateLock);staged={};}outputReady=true;
+    replayVolumes();{std::lock_guard<std::mutex> g(stateLock);staged={};}calibrateClock();outputReady=true;
    }}
 
    if(op){std::lock_guard<std::mutex> g(stateLock);lastSucceeded=text.find("needs attention")==std::string::npos;}
    if(op==1||op==2||op==3||op==4||op==9||(op==6&&!pendingPreset.empty()&&(pendingPreset[0]&0xf0)==0xb0))++stateRevision;
    if(op==7&&apiRecallDirty.exchange(false))++stateRevision;
    if(live)drainMidi();
-  }catch(const std::exception& e){std::string cause=e.what();if(op!=5)disconnect(stop.load());std::string restored;{std::lock_guard<std::mutex> g(stateLock);restored=text;}status(std::string(op==5?"Project save failed: ":"Connection failed: ")+cause+" · "+restored);{std::lock_guard<std::mutex> g(stateLock);lastSucceeded=false;}}
+  }catch(const std::exception& e){std::string cause=e.what();if(op!=5){disconnect(stop.load());syncState=virus::clock::SyncState::error;}std::string restored;{std::lock_guard<std::mutex> g(stateLock);restored=text;}status(std::string(op==5?"Project save failed: ":"Connection failed: ")+cause+" · "+restored);{std::lock_guard<std::mutex> g(stateLock);lastSucceeded=false;}}
    if(op){completed=submitted.load();busy=false;}
   }std::this_thread::sleep_for(std::chrono::milliseconds(2));
   }
@@ -403,22 +484,69 @@ bool HardwareService::restoreProject(const ProjectPatches& patch,bool reconnect,
 }
 std::string HardwareService::controlEndpoint()const{return impl->control?impl->control->path():std::string{};}
 MeterSnapshot HardwareService::meters()const noexcept{MeterSnapshot result;result.usbPeak=impl->usbMeters.read(impl->live.load()&&impl->outputReady.load());result.midiActivity=impl->midiActivity.read(impl->live.load());return result;}
-std::string HardwareService::status()const{std::lock_guard<std::mutex> g(impl->stateLock);return impl->text;}
-void HardwareService::setup(double rate){impl->rate=rate;impl->capture.setup(rate);}
-void HardwareService::beginBlock(bool active)noexcept{
- impl->hostProcessing.store(active);
- bool live=impl->live.load(std::memory_order_acquire)&&impl->outputReady.load(std::memory_order_acquire)&&active;
- if(live!=impl->consumerLive){impl->capture.resetConsumer();impl->consumerLive=live;}
- if(live)impl->bridge.serviceReady(impl->bridge.generation());
- impl->capture.beginBlock(live);
+std::string HardwareService::status()const{std::lock_guard<std::mutex> g(impl->stateLock);return impl->text+(impl->live.load()?std::string(" · Timing ")+(impl->syncState.load()==virus::clock::SyncState::locked?"locked":"unsynchronized"):"");}
+void HardwareService::setup(double rate,unsigned maxBlock){impl->rate=rate;impl->capture.setup(rate);impl->timeline.setup(rate,maxBlock);impl->reportedLatency=impl->timingEnabled?impl->timeline.latencyHost():impl->capture.latency(rate);}
+void HardwareService::beginBlock(bool active,unsigned samples,double tempo,double beats,bool playing,bool beatsValid)noexcept{
+ auto& s=*impl;s.hostProcessing.store(active);s.blockSamples=samples;s.blockTempo=std::isfinite(tempo)&&tempo>0?std::clamp(tempo,1.,1000.):120;s.blockBeats=beats;s.blockPlaying=playing;s.blockBeatsValid=beatsValid&&std::isfinite(beats);
+ bool live=s.live.load(std::memory_order_acquire)&&s.outputReady.load(std::memory_order_acquire)&&active;
+ if(live!=s.consumerLive){s.capture.resetConsumer();s.consumerLive=live;s.clockAnchored=false;s.timeline.valid=false;}
+ auto generation=s.bridge.generation();
+ if(generation!=s.audioGeneration){s.capture.resetConsumer();s.audioGeneration=generation;s.clockAnchored=false;s.timeline.valid=false;}
+ if(live)s.bridge.serviceReady(generation);
+ s.blockLocked=live&&s.syncState.load()==virus::clock::SyncState::locked;
+ if(s.blockLocked)s.capture.beginAlignedBlock(s.timeline.begin(s.capture.newest(),generation));else s.capture.beginBlock(live);
+ s.blockCanSend=live&&(!s.blockLocked||s.capture.ready());
+ s.blockStep=s.capture.increment();s.blockStart=s.capture.position()+s.timeline.latencyDevice();
+ s.performance.begin(generation,s.blockCanSend,s.blockLocked,s.blockStart,s.blockStep,samples,s.rate.load());
+}
+bool HardwareService::queueMidi(unsigned offset,std::array<uint8_t,3> bytes)noexcept{
+ return impl->performance.submit(offset,bytes);
+}
+void HardwareService::endBlock()noexcept{
+ auto& s=*impl;
+
+ if(s.blockLocked&&s.blockCanSend&&s.blockSamples){
+  if(!s.clockAnchored){s.performance.publish(0,{0xfe,0,0},true,0,-1024);unsigned spp=s.blockBeatsValid?unsigned(std::fmod(std::max(0.,s.blockBeats)*4,16384.)):0;s.performance.publish(0,{0xf2,uint8_t(spp&127),uint8_t((spp>>7)&127)},true,0,-1024);s.nextClock=s.blockStart;s.clockAnchored=true;}
+  const double tick=48000.*60/(s.blockTempo*24);unsigned emitted=0;
+  while(s.nextClock<s.blockStart+s.blockSamples*s.blockStep&&emitted<256){++emitted;if(s.nextClock>=s.blockStart){auto offset=unsigned(std::llround((s.nextClock-s.blockStart)/s.blockStep));s.performance.publish(std::min(offset,s.blockSamples-1),{0xf8,0,0},true,0);}s.nextClock+=tick;}
+  if(emitted==256)s.nextClock=s.blockStart+s.blockSamples*s.blockStep;
+  s.timeline.advance(s.blockSamples);
+ }
+ s.performance.end();
 }
 bool HardwareService::render(std::array<int32_t,6>& value)noexcept{
- if(!impl->consumerLive||!impl->capture.pop(value))return false;
+ if(!impl->consumerLive)return false;
+ if(!impl->capture.pop(value)){
+  const auto count=impl->capture.underruns.load();
+  if(count!=impl->handledUnderruns){
+   impl->handledUnderruns=count;
+   // A confirmed marker cannot justify synchronized playback after a capture
+   // gap. Cancel the old epoch on the worker; never reping under held notes.
+   if(impl->timingEnabled){impl->marker.disarm();impl->syncState=virus::clock::SyncState::degraded;impl->panicPending=true;impl->blockLocked=false;impl->blockCanSend=false;}
+  }
+  return false;
+ }
  for(unsigned c=0;c<6;c++){float peak=float(std::abs(double(value[c])/2147483648.));if(peak>impl->renderedPeak[c].load(std::memory_order_relaxed))impl->renderedPeak[c].store(peak,std::memory_order_relaxed);}
  return true;
 }
 void HardwareService::hostProcessing(bool active)noexcept{impl->hostProcessing.store(active);}
 bool HardwareService::connected()const noexcept{return impl->live.load(std::memory_order_acquire);}
 uint64_t HardwareService::stateRevision()const noexcept{return impl->stateRevision.load();}
-unsigned HardwareService::latency()const noexcept{return impl->capture.latency(impl->rate.load());}
+unsigned HardwareService::latency()const noexcept{return impl->reportedLatency.load();}
+#ifdef VIRUS_REWORK_TEST
+bool HardwareService::testCaptureUnderrunFallback(){
+ virus::bridge::DeviceBridge bridge;HardwareService service(bridge);auto& s=*service.impl;
+ bridge.restart(true);bridge.serviceReady(bridge.generation());
+ s.timingEnabled=true;s.syncState=virus::clock::SyncState::locked;
+ s.capture.setup(48000);std::array<float,1024*6> silence{};
+ if(!s.capture.push(silence.data(),1024))return false;
+ s.capture.beginAlignedBlock(900);s.consumerLive=true;s.blockLocked=true;s.blockCanSend=true;
+ std::array<int32_t,6> value{};for(unsigned i=0;i<256;++i)service.render(value);
+ const bool degraded=s.capture.underruns==1&&s.syncState==virus::clock::SyncState::degraded&&s.panicPending&&!s.blockLocked&&!s.blockCanSend;
+ auto previous=bridge.generation();s.drainPerformance(); // control-thread cancellation path
+ const bool blocked=!bridge.ready();bridge.beginBlock(); // processor consumes the epoch change
+ s.consumerLive=false;
+ return degraded&&blocked&&bridge.generation()!=previous&&!s.panicPending&&!s.leaseHeld&&!s.live&&s.callbacks==0&&s.notesSent==0;
+}
+#endif
 }
