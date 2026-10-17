@@ -6,7 +6,7 @@
  text(controller->hardwarePartCount==4?@"S N O W  /  4  P A R T S":darkTheme?@"D A R K  /  1 6  P A R T S":@"P O L A R  /  1 6  P A R T S",NSMakeRect(15,35,175,10),6.5,p.muted);
  line(NSMakePoint(196,49),NSMakePoint(196,467),p.line,.7);
  for(unsigned part=0;part<16;++part){double y=51+part*26;bool selected=part==selectedPart;box(NSMakeRect(10,y,177,24),selected?p.raised:p.panel,p.line,3);if(selected)box(NSMakeRect(10,y+4,2,16),p.accent,nil,1);}
- if(model[@"project_owned"]){
+ if(model[@"project_owned"]&&!model[@"classic_layout"]){
   box(NSMakeRect(207,49,679,416),p.panel,p.line,5);
   NSArray* titles=@[@"EASY EDIT",@"PATCH BROWSER",@"OSCILLATORS",@"FILTERS & ENVELOPES",@"LFOS",@"MODULATION MATRIX",@"ARPEGGIATOR",@"EFFECTS 1",@"REMOTE",@"COMMON",@"",@"EFFECTS 2",@"CONFIGURATION"];
   text(titles[std::clamp(selectedPage,0L,12L)],NSMakeRect(219,54,640,20),11,p.text,NO,NSFontWeightSemibold);
@@ -36,6 +36,7 @@
  using namespace Skin;if(![self visible:node])return;Palette p(darkTheme);
  NSDictionary* a=node[@"attrs"];NSString* type=node[@"type"],*name=a[@"Parameter"]?:@"";NSRect r=rectOf(node[@"absolute_rect"]);
  if(r.size.width<=0||r.size.height<=0||NSMinY(r)>=471)return;
+ if(![self needsToDrawRect:NSInsetRect(r,-20,-15)])return;
  if([type isEqual:@"Container"]||[type isEqual:@"Frame"]||[type isEqual:@"PatchContainer"]||[name hasPrefix:@"LockView/"]||[name hasPrefix:@"Locks/"]||[type isEqual:@"PatchSaveMenu"])return;
  if([name hasPrefix:@"Repository Actions/"])return;
  NSInteger part=[self partOf:node];double v=[self plain:name part:part];NSDictionary* def=[self definition:name];double lo=[def[@"minValue"]doubleValue],hi=[def[@"maxValue"]doubleValue];double n=hi>lo?std::clamp((v-lo)/(hi-lo),0.,1.):0;
@@ -68,34 +69,36 @@
  }
  if([type containsString:@"Knob"]){
   bool hollow=[type isEqual:@"MaskedKnob"];knob(r,n,p,hollow,editable);
-  if(r.origin.x>200&&(!hollow||selectedPage==0||selectedPage==4||selectedPage==11)){text(model[@"project_owned"]?[name stringByReplacingOccurrencesOfString:@"/" withString:@"\n"]:label(name),NSMakeRect(r.origin.x-20,NSMaxY(r)+1,r.size.width+40,22),6.5,p.muted,YES);}
+  if(hollow&&model[@"classic_layout"])text([self textFor:node value:v],NSMakeRect(NSMidX(r)-22,NSMaxY(r)-18,44,12),8,p.ink,YES,NSFontWeightMedium);
+  if(r.origin.x>200&&(!hollow||[a[@"ShowLabel"]boolValue]||selectedPage==0||selectedPage==4||selectedPage==11)){text(a[@"Label"]?:label(name),NSMakeRect(r.origin.x-9,NSMaxY(r)+1,r.size.width+18,14),7,p.muted,YES);}
   return;
  }
  if([type isEqual:@"HorizontalSlider"]||[type isEqual:@"VerticalSlider"]){
   bool horizontal=[type isEqual:@"HorizontalSlider"];NSRect track=horizontal?NSMakeRect(r.origin.x+4,NSMidY(r)-2,r.size.width-8,4):NSMakeRect(NSMidX(r)-2,r.origin.y+4,4,r.size.height-8);box(track,p.line,nil,2);
   double x=horizontal?track.origin.x+n*track.size.width:NSMidX(r),y=horizontal?NSMidY(r):NSMaxY(track)-n*track.size.height;box(NSMakeRect(x-3,y-5,6,10),p.raised,p.muted,2);
-  if(selectedPage!=5&&r.origin.x>200)text(label(name),NSMakeRect(r.origin.x,NSMaxY(r)+1,r.size.width,10),7.5,p.muted,YES);return;
+  if(selectedPage!=5&&r.origin.x>200)text(a[@"Label"]?:label(name),NSMakeRect(r.origin.x,NSMaxY(r)+1,r.size.width,10),7.5,p.muted,YES);return;
  }
  if([type containsString:@"Menu"]||[type isEqual:@"TextSlider"]){
-  box(NSInsetRect(r,.5,.5),p.display,p.line,3);bool menu=[type containsString:@"Menu"];NSRect tr=NSInsetRect(r,menu?5:2,0);if(menu)tr.size.width-=9;text([self textFor:node value:v],tr,r.size.height>18?9:8,p.ink,YES,NSFontWeightMedium);
-  if(selectedPage==9||model[@"project_owned"]){NSString* caption=label(name);if([name hasPrefix:@"Soft Knobs/"])caption=[name.lastPathComponent containsString:@"Name"]?@"NAME":@"DESTINATION";if(![name hasPrefix:@"Soft Knobs/"])text(caption,NSMakeRect(r.origin.x,r.origin.y-12,r.size.width,10),7.5,p.muted,YES);}
+  box(NSInsetRect(r,.5,.5),p.display,p.line,3);bool menu=[type containsString:@"Menu"];NSRect tr=NSInsetRect(r,menu?5:2,0);if(menu)tr.size.width-=9;NSString* valueText=[self textFor:node value:v];if(a[@"ValuePrefix"])valueText=[a[@"ValuePrefix"]stringByAppendingString:valueText];text(valueText,tr,r.size.height>18?9:8,editable?p.ink:p.muted,YES,NSFontWeightMedium);
+  if(a[@"Label"]){text(a[@"Label"],NSMakeRect(r.origin.x,r.origin.y-12,r.size.width,10),7.5,p.muted,YES);}
+  else if(selectedPage==9){NSString* caption=label(name);if(![name hasPrefix:@"Soft Knobs/"])text(caption,NSMakeRect(r.origin.x,r.origin.y-12,r.size.width,10),7.5,p.muted,YES);}
   if(menu){double x=NSMaxX(r)-7,y=NSMidY(r);line(NSMakePoint(x-2,y-1),NSMakePoint(x,y+1),p.muted,.8);line(NSMakePoint(x,y+1),NSMakePoint(x+2,y-1),p.muted,.8);}return;
  }
  if([type containsString:@"Button"]){
   BOOL radio=[type isEqual:@"RadioButton"],active=radio?v==[a[@"OnValue"]doubleValue]:v!=lo;
-  NSString* title=radio?[self textFor:node value:[a[@"OnValue"]doubleValue]]:label(name);
+  NSString* title=a[@"Label"]?:(radio?[self textFor:node value:[a[@"OnValue"]doubleValue]]:label(name));
   if([name hasPrefix:@"Filter"]&&[name hasSuffix:@"/Mode"]&&radio)title=@[@"LP",@"HP",@"BP",@"BS",@"AN 1",@"AN 2",@"AN 3",@"AN 4"][std::clamp([a[@"OnValue"]integerValue],0L,7L)];
   if([name isEqual:@"Filters/Routing"]&&radio)title=@[@"SER 4",@"SER 6",@"PAR",@"SPLIT"][std::clamp([a[@"OnValue"]integerValue],0L,3L)];
   if([name containsString:@"Stages"]&&radio)title=[NSString stringWithFormat:@"%ld",(long)[a[@"OnValue"]integerValue]+1];
   if([name containsString:@"Link"]&&r.size.width<35)title=@"↔";
-  if(r.origin.x<100&&![name isEqual:@"Multi Parameters/Panel Part"])title=[a[@"NormalBack"]containsString:@"Mute"]?@"M":@"D";
+  if(r.origin.x<100&&!a[@"Label"]&&![name isEqual:@"Multi Parameters/Panel Part"])title=[a[@"NormalBack"]containsString:@"Mute"]?@"M":@"D";
   if([name containsString:@"SelectedEnvelope"]&&radio)title=[NSString stringWithFormat:@"%ld",(long)[a[@"OnValue"]integerValue]];
   if([type isEqual:@"IncButton"]||[type isEqual:@"DecButton"])title=[type isEqual:@"IncButton"]?@"+":@"−";
   if(r.size.width<20&&title.length>3){if(![type isEqual:@"IncButton"]&&![type isEqual:@"DecButton"])title=@"";}
-  box(NSInsetRect(r,.7,.7),active?p.raised:p.panel,active?p.accent:p.line,2);text(title,NSInsetRect(r,1,0),r.size.height<15?7:8,active?p.accent:fg,YES,NSFontWeightMedium);
+  box(NSInsetRect(r,.7,.7),active?p.raised:p.panel,active?p.accent:p.line,2);text(title,NSInsetRect(r,1,0),r.size.height<15?(r.size.width<=32&&title.length>5?6.5:7):8,active?p.accent:fg,YES,NSFontWeightMedium);
   if(!title.length){double side=std::min(5.,r.size.height*.3);box(NSMakeRect(NSMidX(r)-side/2,NSMidY(r)-side/2,side,side),active?p.accent:p.muted,nil,side/2);}return;
  }
- if([type isEqual:@"StaticText"]){text([self textFor:node value:v],r,8,p.muted,YES);return;}
+ if([type isEqual:@"StaticText"]){text(a[@"Text"]?:[self textFor:node value:v],r,8,p.muted,YES);return;}
  if([type isEqual:@"ArpEdit"]||[type isEqual:@"RemoteBrowser"]){box(r,p.display,p.line,3);text([type isEqual:@"ArpEdit"]?@"Pattern editing is not available yet":@"No remote template loaded",NSInsetRect(r,16,16),10,p.muted);}
 }
 - (void)applyAppearance {

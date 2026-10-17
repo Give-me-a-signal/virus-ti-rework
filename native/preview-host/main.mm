@@ -32,7 +32,9 @@ public:
   close();application_=owned(new HostApplication);PluginContextFactory::instance().setPluginContext(application_);
   module_=VST3::Hosting::Module::create(path,error);if(!module_)return false;
   auto factory=module_->getFactory();factory.setHostContext(application_);
-  for(const auto& info:factory.classInfos())if(info.category()==kVstAudioEffectClass&&info.name()=="Virus TI Rework (Development)"){
+  // Use the permanent processor identity; display names changed for the beta.
+  const VST3::UID processorID(0x5695B49E,0x529D4E17,0xA2855601,0xA10B277E);
+  for(const auto& info:factory.classInfos())if(info.category()==kVstAudioEffectClass&&info.ID()==processorID){
    provider_=owned(new PlugProvider(factory,info,true));if(!provider_->initialize()){error="VST3 component/controller initialization failed";return false;}break;
   }
   if(!provider_){error="The expected rebuilt Virus TI Rework processor was not found";return false;}

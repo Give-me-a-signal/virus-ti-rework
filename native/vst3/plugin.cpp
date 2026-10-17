@@ -84,6 +84,12 @@ tresult PLUGIN_API Processor::notify(IMessage* message){
  return AudioEffect::notify(message);
 }
 void Controller::hardwareCommand(int operation){auto message=owned(allocateMessage());if(message){message->setMessageID("VTRHardware");message->getAttributes()->setInt("operation",operation);sendMessage(message);}}
+tresult PLUGIN_API Controller::setParamNormalized(ParamID id,ParamValue value){
+ const auto previous=getParamNormalized(id);
+ auto result=EditControllerEx1::setParamNormalized(id,value);
+ if(result==kResultOk&&getParamNormalized(id)!=previous)++editorParameterRevision;
+ return result;
+}
 void Controller::hardwarePreset(const std::vector<uint8_t>& patch,unsigned part){auto message=owned(allocateMessage());if(message){message->setMessageID("VTRHardware");message->getAttributes()->setInt("operation",4);message->getAttributes()->setInt("part",part);message->getAttributes()->setBinary("patch",patch.data(),uint32(patch.size()));sendMessage(message);}}
 tresult PLUGIN_API Controller::notify(IMessage* message){
  if(message&&std::strcmp(message->getMessageID(),"VTRStateRevision")==0){
