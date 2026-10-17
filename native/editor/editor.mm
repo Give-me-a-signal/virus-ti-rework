@@ -14,6 +14,7 @@
 #include <cmath>
 #include <cstring>
 #include <unordered_map>
+#include <unordered_set>
 #include <string>
 using namespace Steinberg;
 using namespace Steinberg::Vst;
@@ -49,6 +50,11 @@ using namespace VirusRework;
  NSInteger selectedUtility;
  NSTimer* refresh;
  uint64_t displayedPatchRevision;
+ uint64_t displayedParameterRevision;
+ BOOL refreshInitialized;
+ BOOL displayedConnected;
+ std::string displayedHardwareText;
+ MeterSnapshot displayedMeters;
  BOOL suppressPresetAutomation;
  NSButton* connectButton;
  NSButton* disconnectButton;
@@ -60,6 +66,7 @@ using namespace VirusRework;
  BOOL darkTheme;
  void (^resizeHandler)(double);
  std::unordered_map<std::string,ParamID> bindings;
+ std::unordered_set<ParamID> editableBindings;
 }
 - (instancetype)initWithController:(Controller*)value resources:(NSString*)directory;
 - (BOOL)condition:(NSString*)name part:(NSInteger)part;
@@ -74,6 +81,7 @@ using namespace VirusRework;
 - (void)loadOfflinePatch:(NSDictionary*)patch;
 - (void)updateBrowserVisibility;
 - (void)finishGraphGesture;
+- (void)refreshEditor;
 - (void)hardwareAction:(NSButton*)sender;
 - (void)drawModernNode:(NSDictionary*)node;
 - (void)drawModernPanels;
@@ -112,7 +120,9 @@ NSString* bindingKey(NSString* name,NSInteger part) {return [NSString stringWith
   graphEditIDs=[NSMutableSet set];patchNames=[NSMutableDictionary dictionary];
   for(NSDictionary* node in nodes)if(node[@"id"])nodeByID[node[@"id"]]=node;
   tracking=[[NSTrackingArea alloc]initWithRect:self.bounds options:NSTrackingMouseMoved|NSTrackingMouseEnteredAndExited|NSTrackingActiveInKeyWindow|NSTrackingInVisibleRect owner:self userInfo:nil];[self addTrackingArea:tracking];
-  for(const auto& spec:kCatalog)bindings[std::string([bindingKey(@(spec.name),spec.part-1) UTF8String])]=spec.id;
+  for(const auto& spec:kCatalog){bindings[std::string([bindingKey(@(spec.name),spec.part-1) UTF8String])]=spec.id;
+   if(spec.midiCC>=0&&spec.resolved&&!std::strstr(spec.name,"Wavetable")&&!std::strstr(spec.name,"HyperSaw")&&!std::strstr(spec.name,"Vocoder"))editableBindings.insert(spec.id);
+  }
   if(model){
    __weak VTRNativeEditor* weak=self;
    NSString* banks=[NSHomeDirectory() stringByAppendingPathComponent:@"Library/Application Support/VirusTIRework/Patches"];
@@ -125,7 +135,23 @@ NSString* bindingKey(NSString* name,NSInteger part) {return [NSString stringWith
 }
 - (void)viewDidMoveToWindow {
  [refresh invalidate];refresh=nil;
- if(self.window){__weak VTRNativeEditor* weak=self;refresh=[NSTimer scheduledTimerWithTimeInterval:0.1 repeats:YES block:^(NSTimer*){VTRNativeEditor* strong=weak;if(strong){if(strong->originalUI&&![[NSFileManager defaultManager]fileExistsAtPath:[originalAppearanceDirectory() stringByAppendingPathComponent:@"editor.xml"]]){[strong->uiStyleButton selectItemWithTag:0];[strong changeUIStyle:strong->uiStyleButton];}strong->controller->hardwareCommand(0);[strong synchronizeHardwarePatch];[strong setNeedsDisplay:YES];}}];}
+ if(self.window){__weak VTRNativeEditor* weak=self;refresh=[NSTimer scheduledTimerWithTimeInterval:0.1 repeats:YES block:^(NSTimer*){VTRNativeEditor* strong=weak;if(strong&&!strong.hiddenOrHasHiddenAncestor&&(strong.window.occlusionState&NSWindowOcclusionStateVisible))[strong refreshEditor];}];refresh.tolerance=.02;}
+}
+- (void)refreshEditor {
+ if(originalUI&&![[NSFileManager defaultManager]fileExistsAtPath:[originalAppearanceDirectory() stringByAppendingPathComponent:@"editor.xml"]]){[uiStyleButton selectItemWithTag:0];[self changeUIStyle:uiStyleButton];}
+ controller->hardwareCommand(0);
+ BOOL patchChanged=displayedPatchRevision!=controller->patchRevision;
+ [self synchronizeHardwarePatch];
+ // A heartbeat is not a visual change. Host automation and real patch readback
+ // invalidate the page, while meter decay only invalidates its small strips.
+ BOOL full=!refreshInitialized||patchChanged||displayedParameterRevision!=controller->editorParameterRevision;
+ if(full)[self setNeedsDisplay:YES];
+ else {
+  if(displayedConnected!=controller->hardwareConnected||displayedHardwareText!=controller->hardwareText)[self setNeedsDisplayInRect:NSMakeRect(258,487,281,22)];
+  for(unsigned part=0;part<16;++part)if(displayedMeters.midiActivity[part]!=controller->hardwareMeters.midiActivity[part])for(NSDictionary* node in nodes)if([node[@"type"]isEqual:@"VUSlider"]&&[self partOf:node]==part&&[self visible:node])[self setNeedsDisplayInRect:rectOf(node[@"absolute_rect"])];
+  for(unsigned bus=0;bus<3;++bus)if(displayedMeters.usbPeak[bus]!=controller->hardwareMeters.usbPeak[bus])[self setNeedsDisplayInRect:NSMakeRect(652+bus*79,469,74,14)];
+ }
+ refreshInitialized=YES;displayedParameterRevision=controller->editorParameterRevision;displayedConnected=controller->hardwareConnected;displayedHardwareText=controller->hardwareText;displayedMeters=controller->hardwareMeters;
 }
 - (void)hardwareAction:(NSButton*)sender {controller->hardwareCommand(int(sender.tag));}
 - (void)dealloc { [refresh invalidate];if(dragID!=kNoParamId)controller->endEdit(dragID);for(NSNumber* identifier in graphEditIDs)controller->endEdit(identifier.unsignedIntValue); }
@@ -170,7 +196,8 @@ NSString* bindingKey(NSString* name,NSInteger part) {return [NSString stringWith
 }
 - (BOOL)visible:(NSDictionary*)node {
  NSInteger part=[self partOf:node];
- if(node[@"page"]&&[node[@"page"]integerValue]>=0&&[node[@"page"]integerValue]!=selectedPage)return NO;
+ NSInteger page=model[@"classic_layout"]&&selectedSection?(selectedUtility?12:8):selectedPage;
+ if(node[@"page"]&&[node[@"page"]integerValue]>=0&&[node[@"page"]integerValue]!=page)return NO;
  if(![self condition:node[@"attrs"][@"Condition"] part:part])return NO;
  id parent=node[@"parent_id"];
  if(parent&&parent!=[NSNull null]){NSDictionary* n=nodeByID[parent];if(n)return [self visible:n];}
@@ -199,6 +226,7 @@ NSString* bindingKey(NSString* name,NSInteger part) {return [NSString stringWith
  if([node[@"attrs"][@"Parameter"] isEqual:@"LockView/Part Lock Indicator"])return;
  NSDictionary* a=node[@"attrs"];NSString* type=node[@"type"];NSRect rect=rectOf(node[@"absolute_rect"]);
  if(rect.size.width<=0||rect.size.height<=0)return;
+ if(![self needsToDrawRect:rect])return;
  NSString* parameter=a[@"Parameter"];NSInteger part=[self partOf:node];double value=[self plain:parameter part:part];NSDictionary* definition=[self definition:parameter];double minimum=[definition[@"minValue"] doubleValue],maximum=[definition[@"maxValue"] doubleValue];double normalized=maximum>minimum?std::clamp((value-minimum)/(maximum-minimum),0.,1.):0.;
  NSString* imageName=a[@"NormalBack"];
  if([type isEqual:@"RadioButton"]&&value==[a[@"OnValue"] doubleValue]&&a[@"PressedBack"])imageName=a[@"PressedBack"];
@@ -246,6 +274,7 @@ NSString* bindingKey(NSString* name,NSInteger part) {return [NSString stringWith
  if([message hasPrefix:@"Disconnected"]&&![message containsString:@"attention"])message=@"Offline · Presets and editing available";
  Skin::text(message,NSMakeRect(258,488,281,18),9,p.muted);
  Skin::text(@"MIDI activity  /  CC7 volume",NSMakeRect(12,471,177,11),7,p.muted,YES);
+ if(!hovered&&!originalUI&&model[@"classic_layout"])Skin::text(@"Dimmed controls unavailable · Graphs illustrative",NSMakeRect(211,470,431,12),8,p.muted);
  for(unsigned bus=0;bus<3;++bus){float level=controller->hardwareMeters.usbPeak[bus];CGFloat x=652+bus*79;NSString* db=level>1e-6?[NSString stringWithFormat:@"%.0f dBFS",20*log10(level)]:@"−∞ dBFS";Skin::text([NSString stringWithFormat:@"USB%u  %@",bus+1,db],NSMakeRect(x,469,74,10),6.5,p.muted,YES);Skin::box(NSMakeRect(x,480,74,2),p.line,nil,1);Skin::box(NSMakeRect(x,480,74*meterFraction(level),2),level>=1?NSColor.systemRedColor:p.accent,nil,1);}
 
  if(hovered){NSString* name=hovered[@"attrs"][@"Parameter"];NSInteger part=[self partOf:hovered];
@@ -264,7 +293,7 @@ NSString* bindingKey(NSString* name,NSInteger part) {return [NSString stringWith
  if(Graphs::supports(type))return NO; // Illustrative beta graphs do not imply hardware support.
  if([name isEqual:@"VirusControl/Selected Section"]||[name isEqual:@"VirusControl/SelectedPage"]||[name isEqual:@"VirusControl/SelectedUtilityPage"]||[name isEqual:@"Multi Parameters/Panel Part"])return YES;
  ParamID id=[self paramID:name part:[self partOf:node]];auto* p=id==kNoParamId?nullptr:controller->getParameterObject(id);
- if(p){for(const auto& c:kCatalog)if(c.id==id)return c.midiCC>=0&&c.resolved&&std::strstr(c.name,"Wavetable")==nullptr&&std::strstr(c.name,"HyperSaw")==nullptr&&std::strstr(c.name,"Vocoder")==nullptr;return NO;}
+ if(p)return !(p->getInfo().flags&ParameterInfo::kIsReadOnly)&&editableBindings.count(id)!=0;
  NSDictionary* definition=[self definition:name];
  return NO;
 }
@@ -393,10 +422,12 @@ NSString* bindingKey(NSString* name,NSInteger part) {return [NSString stringWith
 }
 - (void)mouseUp:(NSEvent*)event {[self finishGraphGesture];if(dragID!=kNoParamId)controller->endEdit(dragID);dragging=nil;dragID=kNoParamId;}
 - (void)mouseMoved:(NSEvent*)event {
- NSPoint point=[self convertPoint:event.locationInWindow fromView:nil];hovered=nil;
+ NSPoint point=[self convertPoint:event.locationInWindow fromView:nil];NSDictionary* previous=hovered;hovered=nil;
  for(NSDictionary* node in [nodes reverseObjectEnumerator])if([self visible:node]&&NSPointInRect(point,rectOf(node[@"absolute_rect"]))&&node[@"attrs"][@"Parameter"]){hovered=node;break;}
- self.toolTip=hovered?([hovered[@"type"]isEqual:@"VUSlider"]?@"MIDI note activity with CC7 volume handle. Not an audio dB meter.":[self editable:hovered]?hovered[@"attrs"][@"Parameter"]:[hovered[@"attrs"][@"Parameter"] stringByAppendingString:@" — hardware editing unavailable in this beta"]):nil;[self setNeedsDisplay:YES];
+ if(hovered==previous)return;
+ self.toolTip=hovered?([hovered[@"type"]isEqual:@"VUSlider"]?@"MIDI note activity with CC7 volume handle. Not an audio dB meter.":[self editable:hovered]?hovered[@"attrs"][@"Parameter"]:[hovered[@"attrs"][@"Parameter"] stringByAppendingString:@" — hardware editing unavailable in this beta"]):nil;[self setNeedsDisplayInRect:NSMakeRect(211,470,431,12)];
 }
+- (void)mouseExited:(NSEvent*)event {if(hovered){hovered=nil;self.toolTip=nil;[self setNeedsDisplayInRect:NSMakeRect(211,470,431,12)];}}
 - (void)keyDown:(NSEvent*)event {
  if(event.keyCode==53){focused=nil;[self setNeedsDisplay:YES];return;}
  if(event.keyCode==48){NSMutableArray* controls=[NSMutableArray array];for(NSDictionary* node in nodes)if([self visible:node]&&[self editable:node]&&!Graphs::supports(node[@"type"])&&![node[@"attrs"][@"Parameter"]hasPrefix:@"Repository Actions/"])[controls addObject:node];
@@ -412,7 +443,6 @@ NSString* bindingKey(NSString* name,NSInteger part) {return [NSString stringWith
  }
  [super keyDown:event];
 }
-- (void)mouseExited:(NSEvent*)event {hovered=nil;[self setNeedsDisplay:YES];}
 - (void)scrollWheel:(NSEvent*)event {if(event.scrollingDeltaY==0)return;NSDictionary* node=[self nodeAt:[self convertPoint:event.locationInWindow fromView:nil]];if(!node||Graphs::supports(node[@"type"]))return;NSDictionary* a=node[@"attrs"];if([a[@"Parameter"] hasPrefix:@"VirusControl/"])return;double v=[self plain:a[@"Parameter"] part:[self partOf:node]];[self applyNode:node plain:v+(event.scrollingDeltaY>0?1:-1) gesture:YES];}
 @end
 
