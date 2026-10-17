@@ -262,6 +262,7 @@ int main() {
  CHECK(process(p,data)==kResultOk);CHECK(p.acceptedEvents()==accepted+4096);CHECK(p.rejectedEvents()==rejected+904);
  connectedBridgeTests();
  CHECK(HardwareService::testCaptureUnderrunFallback());
+ CHECK(HardwareService::testSnowTimingIsolation());
  CHECK(processAllocations==0);
  p.terminate();c.terminate();
  std::cout<<"PASS: native processor/controller, nonzero six-channel PCM, exact MIDI offsets, bridge lifecycle, underrun, discontinuity, zero process allocations, catalog, state and "<<raw.size()<<" state truncations\n";

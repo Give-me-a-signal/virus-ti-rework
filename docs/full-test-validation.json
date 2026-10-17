@@ -1,0 +1,39 @@
+{
+  "version": "0.2.0-test.1",
+  "build": 2005,
+  "status": "integration tester candidate; not stable; physical integrated run not performed",
+  "source_commit": "filled by the packager from the clean checkout",
+  "architecture": "arm64",
+  "macos_deployment_target": "12.0",
+  "local_platform": "M1 Pro, macOS 26.2 (25C56), AppleClang 17 / CLTools 26.0",
+  "configuration": "CMake/Ninja Release; VTR_FULL_TEST_BUILD=ON; VTR_TIMING_DAW_TEST_BUILD=OFF; VTR_SNOW_PLAYBACK_TEST_BUILD=OFF; VTR_BUNDLE_EMULATOR=OFF",
+  "components": {
+    "main": "480b3d0b1d68927ec7f4bbfe08e9536c268692cc",
+    "pr6": "3012574dba50f53f99feaa4704c7b7cd65920e09",
+    "pr7_rebased": "2cb4577ebce4408ddc99ea1c565c917ffe06ac76",
+    "pr9": "afb61da459dd4cc0dae7b418f807d7774becda77",
+    "pr11": "40cd6016254a0216a7739a6444f50ac6aa2cbfd8"
+  },
+  "marker_timing_default": false,
+  "snow_physical_verified": false,
+  "firmware_operations": false,
+  "stored_bank_writes": false,
+  "usb_resets": false,
+  "not_tested": [
+    "physical playback/recall/restoration on this integrated revision",
+    "connected Logic save/reopen; earlier failure unresolved",
+    "physical Snow/TI2/Polar/keyboard validation",
+    "complete synchronized AU timing acceptance; earlier failure unresolved",
+    "clean-account browser download and macOS approval",
+    "Ableton authorized save/reopen; LiveProfessor"
+  ],
+  "validation_results": "See commit-linked CI logs and integration PR; tests do not establish physical compatibility",
+  "signing": "ad-hoc, not Developer ID signed or notarized",
+  "offline": {
+    "project_suites_passed": 17,
+    "vst3_validator_passed": 47,
+    "portable_transport_identity_clock": "passed, including ASan/UBSan variants",
+    "integration_regressions": "Snow channel limits, silent return 3, refused calibration, model-driven editor invalidation",
+    "ci_auval": "see attached exact-head full tester CI; not a hardware/DAW compatibility test"
+  }
+}

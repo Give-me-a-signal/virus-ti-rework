@@ -8,6 +8,12 @@ An independent, open-source community project by **Give Me a Signal** to keep ow
 
 **Normal installation needs no compiler, Terminal commands or original Access installer.** Dark and Polar are included. Importing your own Access installer is optional and adds the legacy appearance.
 
+**Combined tester candidate: 0.2.0-test.1 (build 2005).** This branch integrates
+PRs #6/#7/#9/#11. Read the [tester guide and known blockers](docs/FULL_TEST_BUILD.md)
+before using its separate prerelease. Connected Logic AU recall remains
+unresolved, physical Snow support is unverified, and marker timing stays off by
+default. The earlier beta's hardware results do not validate this combined build.
+
 ![Virus TI Rework — Modern Dark filter page](docs/screenshots/dark-page-03.png)
 
 [Install](#setup) · [Legacy appearance](#optional-original-access-appearance) · [Tested setups](#tested-setups) · [AI-assisted setup](#ai-assisted-setup-for-non-technical-users) · [What works](#what-works) · [How it works](#how-it-works) · [Engineering history](#how-we-built-it) · [Screenshots](#interface-gallery) · [Limitations](#known-limitations) · [Help test](#help-test-on-more-macs-and-synths) · [Contribute](CONTRIBUTING.md) · [Release packaging](#packaging-and-binary-releases)

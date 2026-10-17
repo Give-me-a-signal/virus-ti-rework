@@ -275,10 +275,13 @@ tresult PLUGIN_API Controller::getMidiControllerAssignment(int32 bus,int16 chann
 }
 }
 #ifndef VIRUS_REWORK_TEST
+#ifndef VTR_PLUGIN_VERSION
+#define VTR_PLUGIN_VERSION "0.2.0-beta.1"
+#endif
 using namespace Steinberg;
 using namespace Steinberg::Vst;
 BEGIN_FACTORY_DEF("Virus TI Rework Project","","")
-DEF_CLASS2(INLINE_UID_FROM_FUID(VirusRework::kProcessorID),PClassInfo::kManyInstances,kVstAudioEffectClass,"Virus TI Rework",0,"Instrument|External","0.2.0-beta.1",kVstVersionString,VirusRework::Processor::create)
-DEF_CLASS2(INLINE_UID_FROM_FUID(VirusRework::kControllerID),PClassInfo::kManyInstances,kVstComponentControllerClass,"Virus TI Rework Controller",0,"","0.2.0-beta.1",kVstVersionString,VirusRework::Controller::create)
+DEF_CLASS2(INLINE_UID_FROM_FUID(VirusRework::kProcessorID),PClassInfo::kManyInstances,kVstAudioEffectClass,"Virus TI Rework",0,"Instrument|External",VTR_PLUGIN_VERSION,kVstVersionString,VirusRework::Processor::create)
+DEF_CLASS2(INLINE_UID_FROM_FUID(VirusRework::kControllerID),PClassInfo::kManyInstances,kVstComponentControllerClass,"Virus TI Rework Controller",0,"",VTR_PLUGIN_VERSION,kVstVersionString,VirusRework::Controller::create)
 END_FACTORY
 #endif

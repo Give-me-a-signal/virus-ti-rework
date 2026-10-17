@@ -35,6 +35,7 @@ public:
  unsigned latency() const noexcept;
 #ifdef VIRUS_REWORK_TEST
  static bool testCaptureUnderrunFallback(); // synthetic FIFO exhaustion; no device I/O
+ static bool testSnowTimingIsolation(); // combined model/queue/capture path, no device I/O
 #endif
  unsigned activePartCount() const noexcept;
 private:

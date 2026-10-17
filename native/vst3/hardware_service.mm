@@ -556,6 +556,21 @@ bool HardwareService::connected()const noexcept{return impl->live.load(std::memo
 uint64_t HardwareService::stateRevision()const noexcept{return impl->stateRevision.load();}
 unsigned HardwareService::latency()const noexcept{return impl->reportedLatency.load();}
 #ifdef VIRUS_REWORK_TEST
+bool HardwareService::testSnowTimingIsolation(){
+ virus::bridge::DeviceBridge bridge;HardwareService service(bridge);auto& s=*service.impl;
+ s.model=DeviceModel::snow4;s.supportedParts=4;s.timingEnabled=true;
+ s.calibrateClock(); // Must return before touching the absent MIDI session.
+ if(s.syncState!=virus::clock::SyncState::degraded||s.marker.validMarker()>=0)return false;
+ s.performance.begin(1,true,false,0,1,64,48000);
+ if(!service.queueMidi(0,{0x93,60,100})||service.queueMidi(0,{0x94,60,100})||service.queueMidi(0,{0xbf,123,0}))return false;
+ s.performance.end();std::array<PerformanceEvent,4> events{};
+ if(s.performance.take(events.data(),events.size())!=1||events[0].bytes[0]!=0x93)return false;
+ s.capture.setup(48000);std::array<float,1024*6> samples; samples.fill(.125f);
+ if(!s.capture.push(samples.data(),1024))return false;
+ s.capture.beginAlignedBlock(900);s.consumerLive=true;std::array<int32_t,6> frame{};
+ const bool read=service.render(frame);s.consumerLive=false;
+ return read&&frame[0]!=0&&frame[3]!=0&&frame[4]==0&&frame[5]==0&&!s.live&&!s.leaseHeld&&s.callbacks==0&&s.notesSent==0;
+}
 bool HardwareService::testCaptureUnderrunFallback(){
  virus::bridge::DeviceBridge bridge;HardwareService service(bridge);auto& s=*service.impl;
  bridge.restart(true);bridge.serviceReady(bridge.generation());
