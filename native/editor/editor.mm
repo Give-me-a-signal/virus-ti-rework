@@ -170,7 +170,8 @@ NSString* bindingKey(NSString* name,NSInteger part) {return [NSString stringWith
 }
 - (BOOL)visible:(NSDictionary*)node {
  NSInteger part=[self partOf:node];
- if(node[@"page"]&&[node[@"page"]integerValue]>=0&&[node[@"page"]integerValue]!=selectedPage)return NO;
+ NSInteger page=model[@"classic_layout"]&&selectedSection?(selectedUtility?12:8):selectedPage;
+ if(node[@"page"]&&[node[@"page"]integerValue]>=0&&[node[@"page"]integerValue]!=page)return NO;
  if(![self condition:node[@"attrs"][@"Condition"] part:part])return NO;
  id parent=node[@"parent_id"];
  if(parent&&parent!=[NSNull null]){NSDictionary* n=nodeByID[parent];if(n)return [self visible:n];}
@@ -246,6 +247,7 @@ NSString* bindingKey(NSString* name,NSInteger part) {return [NSString stringWith
  if([message hasPrefix:@"Disconnected"]&&![message containsString:@"attention"])message=@"Offline · Presets and editing available";
  Skin::text(message,NSMakeRect(258,488,281,18),9,p.muted);
  Skin::text(@"MIDI activity  /  CC7 volume",NSMakeRect(12,471,177,11),7,p.muted,YES);
+ if(!hovered&&!originalUI&&model[@"classic_layout"])Skin::text(@"Dimmed controls unavailable · Graphs illustrative",NSMakeRect(211,470,431,12),8,p.muted);
  for(unsigned bus=0;bus<3;++bus){float level=controller->hardwareMeters.usbPeak[bus];CGFloat x=652+bus*79;NSString* db=level>1e-6?[NSString stringWithFormat:@"%.0f dBFS",20*log10(level)]:@"−∞ dBFS";Skin::text([NSString stringWithFormat:@"USB%u  %@",bus+1,db],NSMakeRect(x,469,74,10),6.5,p.muted,YES);Skin::box(NSMakeRect(x,480,74,2),p.line,nil,1);Skin::box(NSMakeRect(x,480,74*meterFraction(level),2),level>=1?NSColor.systemRedColor:p.accent,nil,1);}
 
  if(hovered){NSString* name=hovered[@"attrs"][@"Parameter"];NSInteger part=[self partOf:hovered];

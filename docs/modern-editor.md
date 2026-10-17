@@ -2,6 +2,36 @@
 
 The real native VST3 editor now retains the recovered Virus Control layout and draws scalable vector controls, panels, graphs and waveforms with system typography. The 16-part sidebar, page order, parameter positions, browser panes and existing host bindings remain the structural reference. The palette takes inspiration from the [Access TI2 hardware range](https://www.virus.info/virusti/overview): charcoal and red for Virus Dark; warm white, aluminium-grey and red for Polar. This is a modern interpretation, not a pixel-identical copy.
 
+## Classic layout restoration, 17 October 2026
+
+The downloadable-beta change in `2e86a39` replaced the shared classic geometry
+with a registry-order eight-column grid for Dark/Polar. That changed the layout
+beyond the intended removal of required Access resources. The restoration uses
+explicit project-authored positions and the existing vector panels: oscillator
+1/common/2, lower oscillator/unison/mixer, filters/envelopes, three LFO rows,
+six matrix slots in two columns, arp, both effects pages and Common. The sidebar
+and Utility → Remote/Configuration navigation follow the earlier arrangement.
+
+Dark/Polar work with no Access installer, imported XML, artwork, waveform tables
+or factory content. Original Access artwork remains an optional separate import.
+Changing themes preserves geometry and host parameters. Captured oscillator mode
+and filter type select one matching illustrative display; this does not enable
+unsupported hardware selectors or graph dragging. Unimplemented controls,
+including sidebar M/D and the part-volume knob, remain visibly read-only; CC7
+sliders retain their existing per-part bindings. No new parameter IDs or state
+formats are introduced. This UI change does not integrate pending Snow/clock work.
+
+The AU/VST3/setup build number is 2003 (AU component version 8195), so hosts can
+distinguish it from beta build 2001 and the Snow preview's build 2002. This is a
+PR test revision, not a change to the existing published releases.
+
+The native editor suite now checks key classic group relationships, centred
+oscillator graphs, right-hand detune placement, six-slot matrix columns, Utility
+navigation and browser restoration, model-dependent displays, all node bounds,
+non-overlapping enabled hit targets and coordinate conversion at all five scales.
+It also verifies registry ranges/defaults and parameter values remain unchanged.
+Screenshots are disconnected native Cocoa captures, not hardware evidence.
+
 ## Try it
 
 Open `native/preview-host/build-modern/VirusTIModernPreview.app`. This dedicated preview embeds the candidate plug-in and supports offline editing and preset browsing. It does not activate audio or connect to the TI. The actual candidate is `native/vst3/build-modern/VST3/Release/Virus TI Rework Development.vst3`; that 11 October candidate was not installed in Live at the time. The installed build is now the 12 October candidate described below.
